@@ -1,4 +1,4 @@
--- Налаштування
+
 local Settings = {
     AutoPickup = true,
     AutoSell = true,
@@ -7,11 +7,11 @@ local Settings = {
     SellCooldown = 5
 }
 
--- Система управління потоками
+
 local RunningThreads = {}
 local ShouldStop = false
 
--- Кольори для консолі
+
 local Colors = {
     Red = Color3.fromRGB(255, 85, 85),
     Green = Color3.fromRGB(85, 255, 85),
@@ -19,12 +19,12 @@ local Colors = {
     White = Color3.fromRGB(255, 255, 255)
 }
 
--- Безпечне очищення консолі
+
 local function SafeConsoleClear()
     pcall(rconsoleclear)
 end
 
--- Функція для логування
+
 local function Log(message, color)
     if rconsoleprint then
         rconsoleprint("@@")
@@ -37,7 +37,7 @@ local function Log(message, color)
     end
 end
 
--- Збереження налаштувань
+
 local function SaveSettings()
     if not isfolder("Delta_AutoFarm") then
         makefolder("Delta_AutoFarm")
@@ -45,12 +45,12 @@ local function SaveSettings()
     writefile("Delta_AutoFarm/settings.txt", game:GetService("HttpService"):JSONEncode(Settings))
 end
 
--- Завантаження налаштувань
+
 if isfile("Delta_AutoFarm/settings.txt") then
     Settings = game:GetService("HttpService"):JSONDecode(readfile("Delta_AutoFarm/settings.txt"))
 end
 
--- Функція зупинки потоків
+
 local function StopAllThreads()
     ShouldStop = true
     task.wait(0.1)
@@ -58,7 +58,7 @@ local function StopAllThreads()
     ShouldStop = false
 end
 
--- Функція запуску потоку
+
 local function StartThread(func)
     local co = coroutine.create(func)
     table.insert(RunningThreads, co)
@@ -66,7 +66,7 @@ local function StartThread(func)
     return co
 end
 
--- Автопідбирання
+
 local function PickupItems()
     if not firetouchinterest then
         Log("firetouchinterest не знайдено! Автопідбирання не працюватиме", Colors.Red)
@@ -93,7 +93,7 @@ local function PickupItems()
     end
 end
 
--- Автопродаж
+
 local function SellItems()
     local lastSold = 0
     while task.wait(1) and not ShouldStop do
@@ -115,7 +115,7 @@ local function SellItems()
     end
 end
 
--- Anti-AFK система
+
 local VirtualUser = game:GetService("VirtualUser")
 game.Players.LocalPlayer.Idled:Connect(function()
     if Settings.AntiAFK then
@@ -124,7 +124,7 @@ game.Players.LocalPlayer.Idled:Connect(function()
     end
 end)
 
--- Функція для відображення меню
+
 local function ShowMenu()
     SafeConsoleClear()
     Log("===== AutoFarm Menu =====", Colors.Yellow)
@@ -137,7 +137,7 @@ local function ShowMenu()
     Log("7. Вийти")
 end
 
--- Обробка числового вводу
+
 local function GetNumberInput(prompt, currentValue)
     Log(prompt, Colors.Yellow)
     local input = rconsoleinput()
@@ -146,7 +146,7 @@ local function GetNumberInput(prompt, currentValue)
     return number and number > 0 and number or currentValue
 end
 
--- Головний цикл меню
+
 local function MainLoop()
     if not rconsoleprint then
         print("rconsole не підтримується у вашому експлойтері. Меню працювати не буде.")
@@ -156,7 +156,7 @@ local function MainLoop()
     Log("Anti-AFK: " .. (Settings.AntiAFK and "увімкнено" or "вимкнено"), 
         Settings.AntiAFK and Colors.Green or Colors.Red)
     
-    -- Автозапуск фарму при старті
+
     StartThread(PickupItems)
     StartThread(SellItems)
     Log("Фарм запущено автоматично!", Colors.Green)
@@ -205,7 +205,7 @@ local function MainLoop()
     end
 end
 
--- Запуск головного меню в безпечному pcall
+
 pcall(function()
     MainLoop()
 end)
