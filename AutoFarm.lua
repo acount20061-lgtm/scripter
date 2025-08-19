@@ -53,7 +53,7 @@ end
 -- Функція зупинки потоків
 local function StopAllThreads()
     ShouldStop = true
-    task.wait(0.1) -- Час для коректного завершення потоків
+    task.wait(0.1)
     RunningThreads = {}
     ShouldStop = false
 end
@@ -68,6 +68,11 @@ end
 
 -- Автопідбирання
 local function PickupItems()
+    if not firetouchinterest then
+        Log("firetouchinterest не знайдено! Автопідбирання не працюватиме", Colors.Red)
+        return
+    end
+
     while task.wait(0.5) and not ShouldStop do
         if Settings.AutoPickup then
             local character = game.Players.LocalPlayer.Character
@@ -88,18 +93,21 @@ local function PickupItems()
     end
 end
 
--- Автопродаж (з автопошуком RemoteEvent)
+-- Автопродаж
 local function SellItems()
     local lastSold = 0
     while task.wait(1) and not ShouldStop do
         if Settings.AutoSell and tick() - lastSold >= Settings.SellCooldown then
             pcall(function()
                 for _, obj in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-                    if obj:IsA("RemoteEvent") and obj.Name:lower():find("sell") then
-                        obj:FireServer()
-                        lastSold = tick()
-                        Log("[" .. os.date("%H:%M:%S") .. "] Продано предметів через: " .. obj.Name, Colors.Green)
-                        break
+                    if obj:IsA("RemoteEvent") then
+                        Log("Знайдено RemoteEvent: "..obj.Name, Colors.Yellow)
+                        if obj.Name:lower():find("sell") then
+                            obj:FireServer()
+                            lastSold = tick()
+                            Log("[" .. os.date("%H:%M:%S") .. "] Продано предметів через: " .. obj.Name, Colors.Green)
+                            break
+                        end
                     end
                 end
             end)
@@ -123,7 +131,7 @@ local function ShowMenu()
     Log("1. Автопідбирання: " .. (Settings.AutoPickup and "✅" or "❌"))
     Log("2. Автопродаж: " .. (Settings.AutoSell and "✅" or "❌"))
     Log("3. Anti-AFK: " .. (Settings.AntiAFK and "✅" or "❌"))
-    Log("4. Радіус підбирання: " .. Settings.PickupRange)
+    Log("4.Радіус підбирання: " .. Settings.PickupRange)
     Log("5. Затримка продажу: " .. Settings.SellCooldown .. " сек")
     Log("6. Почати/перезапустити фарм")
     Log("7. Вийти")
@@ -140,6 +148,11 @@ end
 
 -- Головний цикл меню
 local function MainLoop()
+    if not rconsoleprint then
+        print("rconsole не підтримується у вашому експлойтері. Меню працювати не буде.")
+        return
+    end
+
     Log("Anti-AFK: " .. (Settings.AntiAFK and "увімкнено" or "вимкнено"), 
         Settings.AntiAFK and Colors.Green or Colors.Red)
     
@@ -192,5 +205,7 @@ local function MainLoop()
     end
 end
 
--- Запуск головного меню
-MainLoop()
+-- Запуск головного меню в безпечному pcall
+pcall(function()
+    MainLoop()
+end)
