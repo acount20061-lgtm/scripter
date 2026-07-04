@@ -34,7 +34,7 @@ if not RayfieldSuccess then return end
 local Window = Rayfield:CreateWindow({
    Name = "UA Killer Hub | YBA",
    LoadingTitle = "Завантаження...",
-   LoadingSubtitle = "by acount20061-lgtm | Smooth Tween",
+   LoadingSubtitle = "by acount20061-lgtm | Anchored Bypass",
    ConfigurationSaving = { 
        Enabled = true, 
        FolderName = "UAKillerHub", 
@@ -200,11 +200,11 @@ ShopTab:CreateToggle({
 })
 
 -- ====================
--- Вкладка АВТОФАРМ (ІДЕАЛЬНИЙ TWEEN)
+-- Вкладка АВТОФАРМ (БЕЗПЕЧНИЙ ANCHOR TWEEN)
 -- ====================
 _G.ItemFarm = false
 _G.ItemESP = false
-_G.TweenSpeed = 45 
+_G.TweenSpeed = 50 
 
 local bannedCoordinates = {} 
 local espObjects = {}
@@ -283,31 +283,25 @@ task.spawn(function()
 end)
 
 local noclipConnection
-local physicsConnection
 local currentTween
 
 local function stopMovement()
     if currentTween then currentTween:Cancel(); currentTween = nil end
     if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
-    if physicsConnection then physicsConnection:Disconnect(); physicsConnection = nil end
     
-    -- Повертаємо фізику персонажу
+    -- Обов'язково знімаємо заморозку після зупинки
     local char = player.Character
-    if char and char:FindFirstChild("Humanoid") then
-        char.Humanoid.PlatformStand = false
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.Anchored = false
     end
 end
 
 local function antiKickTweenMove(targetCFrame)
     local char = player.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChild("Humanoid")
-    if not hrp or not hum then return end
+    if not hrp then return end
     
     stopMovement() 
-
-    -- СЕКРЕТ ПЕРШОГО ВІДЕО: Вимикаємо фізику ніг, щоб він не спотикався і не падав
-    hum.PlatformStand = true
 
     local startPos = hrp.Position
     local endPos = targetCFrame.Position
@@ -318,19 +312,14 @@ local function antiKickTweenMove(targetCFrame)
     local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
     currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     
+    -- СЕКРЕТ З ПЕРШОГО ВІДЕО: Заморожуємо персонажа, щоб він не падав і став "статуєю"
+    hrp.Anchored = true
+    
     noclipConnection = RunService.Stepped:Connect(function()
         if char then
             for _, part in ipairs(char:GetDescendants()) do
                 if part:IsA("BasePart") then part.CanCollide = false end
             end
-        end
-    end)
-    
-    physicsConnection = RunService.Heartbeat:Connect(function()
-        if hrp then 
-            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0) 
-            -- Блокуємо обертання, щоб персонажа не крутило як дзиґу
-            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
         end
     end)
     
@@ -341,13 +330,13 @@ local function antiKickTweenMove(targetCFrame)
     task.wait(0.2) 
 end
 
-FarmTab:CreateLabel("⚠️ Безпечна швидкість: 40-50")
+FarmTab:CreateLabel("Рекомендована швидкість: 50-60")
 
 FarmTab:CreateSlider({
    Name = "Швидкість польоту (Tween Speed)",
-   Range = {20, 80}, 
+   Range = {20, 100}, 
    Increment = 1,
-   CurrentValue = 45,
+   CurrentValue = 50,
    Flag = "TweenSpeed_Slider", 
    Callback = function(Value)
        _G.TweenSpeed = Value
@@ -420,8 +409,8 @@ FarmTab:CreateToggle({
                    end
                    
                    if targetItem then
-                       -- Підняв позицію ще вище (на 3 юніти), щоб ти гарантовано летів НАД землею
-                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 3, 0)
+                       -- Повернув безпечну висоту (+2), щоб не тригерити захист від польотів
+                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 2, 0)
                        local targetPos = targetItem.part.Position
                        
                        antiKickTweenMove(targetCFrame)
