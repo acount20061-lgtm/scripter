@@ -1,19 +1,35 @@
+-- Чекаємо повного завантаження
+repeat task.wait() until game:IsLoaded()
+
 local autoLoadFile = "YBA_AutoLoad.txt"
 local shouldAutoLoad = false
 
--- Перевіряємо, чи існує наш незалежний файл для автозавантаження
-if isfile and isfile(autoLoadFile) then
-    shouldAutoLoad = readfile(autoLoadFile) == "true"
-else
-    -- Якщо файлу немає (перший запуск), створюємо його і ставимо false (вимкнено) для безпеки
-    if writefile then writefile(autoLoadFile, "false") end
-end
+-- Відновлюємо папку, якщо ти її видалив
+pcall(function()
+    if makefolder and not isfolder("UAKillerHub") then
+        makefolder("UAKillerHub")
+    end
+end)
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Перевіряємо наш незалежний файл автозавантаження
+pcall(function()
+    if isfile and isfile(autoLoadFile) then
+        shouldAutoLoad = (readfile(autoLoadFile) == "true")
+    else
+        if writefile then writefile(autoLoadFile, "false") end
+    end
+end)
+
+-- Безпечне завантаження Rayfield
+local RayfieldSuccess, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not RayfieldSuccess then return end
 
 local Window = Rayfield:CreateWindow({
-   Name = "UA Killer Hub | YBA (Ultimate Bypass)",
-   LoadingTitle = "Завантаження фінальної версії...",
+   Name = "UA Killer Hub | YBA",
+   LoadingTitle = "Завантаження...",
    LoadingSubtitle = "by acount20061-lgtm",
    ConfigurationSaving = { 
        Enabled = true, 
@@ -25,41 +41,42 @@ local Window = Rayfield:CreateWindow({
 local MainTab = Window:CreateTab("Головна", 4483362458)
 local FarmTab = Window:CreateTab("Автофарм", 4483362534)
 
--- === НАЛАШТУВАННЯ ЗАВАНТАЖЕННЯ ===
 MainTab:CreateSection("Налаштування конфігу")
 
 MainTab:CreateToggle({
    Name = "Автозавантаження конфігу при старті",
    CurrentValue = shouldAutoLoad,
    Callback = function(Value)
-       -- Зберігаємо вибір у незалежний файл
-       if writefile then
-           writefile(autoLoadFile, tostring(Value))
-       end
+       pcall(function()
+           if writefile then
+               writefile(autoLoadFile, tostring(Value))
+           end
+       end)
    end,
 })
 
 MainTab:CreateButton({
    Name = "Завантажити конфіг вручну",
    Callback = function()
-       Rayfield:LoadConfiguration()
-       Rayfield:Notify({
-           Title = "Успіх",
-           Content = "Конфіг успішно завантажено!",
-           Duration = 3,
-           Image = 4483362458,
-       })
+       pcall(function()
+           Rayfield:LoadConfiguration()
+           Rayfield:Notify({
+               Title = "Успіх",
+               Content = "Конфіг завантажено!",
+               Duration = 3,
+               Image = 4483362458,
+           })
+       end)
    end,
 })
 
 MainTab:CreateSection("Характеристики")
--- =================================
 
 local JP_Value = 50
 task.spawn(function()
     while task.wait(0.1) do
         local p = game.Players.LocalPlayer
-        if p.Character and p.Character:FindFirstChild("Humanoid") then
+        if p and p.Character and p.Character:FindFirstChild("Humanoid") then
             p.Character.Humanoid.JumpPower = JP_Value
         end
     end
@@ -187,7 +204,6 @@ local function antiKickMove(targetCFrame)
     end
 end
 
--- Обмежив максимальний Range до 35, щоб було безпечніше
 FarmTab:CreateSlider({
    Name = "Дистанція кроку (Step Distance)",
    Range = {5, 35}, 
@@ -220,7 +236,7 @@ FarmTab:CreateToggle({
 })
 
 FarmTab:CreateToggle({
-   Name = "Увімкнути Автофарм (Глобальний пошук)",
+   Name = "Увімкнути Автофарм",
    CurrentValue = false,
    Flag = "ItemFarmToggle",
    Callback = function(Value)
@@ -320,8 +336,17 @@ for _, itemName in ipairs(sortedItems) do
    })
 end
 
--- === ФІНАЛЬНИЙ ЕТАП: АВТОЗАВАНТАЖЕННЯ ===
--- Якщо перемикач з текстового файлу == true, завантажуємо конфіг
+-- Перевіряємо, чи існує сам файл конфігу Rayfield перед завантаженням
 if shouldAutoLoad then
-    Rayfield:LoadConfiguration()
+    pcall(function()
+        -- Назва файлу, яку створює Rayfield
+        local configPath = "UAKillerHub/YBA_Config.json" 
+        -- Якщо файл існує (в тебе експлойт підтримує isfile), тоді завантажуємо
+        if (isfile and isfile(configPath)) or not isfile then
+            Rayfield:LoadConfiguration()
+        else
+            -- Якщо файлу нема, вимикаємо автозавантаження, щоб не було проблем наступного разу
+            if writefile then writefile(autoLoadFile, "false") end
+        end
+    end)
 end
