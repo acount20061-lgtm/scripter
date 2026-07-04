@@ -5,14 +5,14 @@ local player = game.Players.LocalPlayer
 local autoLoadFile = "YBA_AutoLoad.txt"
 local shouldAutoLoad = false
 
--- Відновлюємо папку, якщо ти її видалив
+-- Відновлюємо папку
 pcall(function()
     if makefolder and not isfolder("UAKillerHub") then
         makefolder("UAKillerHub")
     end
 end)
 
--- Перевіряємо наш незалежний файл автозавантаження
+-- Перевіряємо автозавантаження
 pcall(function()
     if isfile and isfile(autoLoadFile) then
         shouldAutoLoad = (readfile(autoLoadFile) == "true")
@@ -31,7 +31,7 @@ if not RayfieldSuccess then return end
 local Window = Rayfield:CreateWindow({
    Name = "UA Killer Hub | YBA",
    LoadingTitle = "Завантаження...",
-   LoadingSubtitle = "by acount20061-lgtm",
+   LoadingSubtitle = "by acount20061-lgtm | Anti-Kick Bypass",
    ConfigurationSaving = { 
        Enabled = true, 
        FolderName = "UAKillerHub", 
@@ -41,7 +41,7 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Головна", 4483362458)
 local FarmTab = Window:CreateTab("Автофарм", 4483362534)
-local ShopTab = Window:CreateTab("Магазин", 4483362458) -- Нова вкладка
+local ShopTab = Window:CreateTab("Магазин", 4483362458)
 
 -- ====================
 -- Вкладка ГОЛОВНА
@@ -65,12 +65,6 @@ MainTab:CreateButton({
    Callback = function()
        pcall(function()
            Rayfield:LoadConfiguration()
-           Rayfield:Notify({
-               Title = "Успіх",
-               Content = "Конфіг завантажено!",
-               Duration = 3,
-               Image = 4483362458,
-           })
        end)
    end,
 })
@@ -99,39 +93,63 @@ MainTab:CreateSlider({
 })
 
 -- ====================
--- Вкладка МАГАЗИН (Логіка друга)
+-- Вкладка МАГАЗИН (БЕЗПЕЧНА ЧЕРГА ПРОДАЖУ)
 -- ====================
 _G.AutoSell = false
 _G.AutoBuy = false
 
--- Функція продажу
-local function sellItem(item)
+local sellQueue = {}
+local isSelling = false
+
+-- Безпечний обробник черги
+local function processSellQueue()
+    if isSelling then return end
+    isSelling = true
+    
+    while #sellQueue > 0 do
+        if not _G.AutoSell then break end
+        
+        local item = table.remove(sellQueue, 1)
+        if item and item.Parent == player.Backpack and item:IsA("Tool") and item.Name ~= "Lucky Arrow" then
+            local character = player.Character
+            local remote = character and character:FindFirstChild("RemoteEvent")
+            local hum = character and character:FindFirstChild("Humanoid")
+            
+            if remote and hum then
+                hum:EquipTool(item)
+                task.wait(0.4) -- БЕЗПЕЧНА ЗАТРИМКА (Щоб сервер не подумав, що це спам)
+                
+                remote:FireServer("EndDialogue", {
+                    ["Option"] = "Option1", 
+                    ["Dialogue"] = "Dialogue5", 
+                    ["NPC"] = "Merchant"
+                })
+                
+                task.wait(0.25) -- Затримка після продажу перед наступним предметом
+            end
+        end
+    end
+    isSelling = false
+end
+
+local function queueItemForSale(item)
     if not _G.AutoSell then return end
     if not item or not item:IsA("Tool") or item.Name == "Lucky Arrow" then return end
     
-    local character = player.Character
-    local remote = character and character:FindFirstChild("RemoteEvent")
-    local hum = character and character:FindFirstChild("Humanoid")
-    
-    if remote and hum then
-        hum:EquipTool(item)
-        task.wait(0.15) 
-        remote:FireServer("EndDialogue", {
-            ["Option"] = "Option1", 
-            ["Dialogue"] = "Dialogue5", 
-            ["NPC"] = "Merchant"
-        })
-    end
+    table.insert(sellQueue, item)
+    task.spawn(processSellQueue)
 end
 
--- Моніторинг рюкзака
 local function setupBackpackListener(backpack)
+    -- Додаємо все, що є, в чергу
     for _, item in ipairs(backpack:GetChildren()) do
-        task.spawn(sellItem, item)
+        queueItemForSale(item)
     end
+    
+    -- Слухаємо нові предмети
     backpack.ChildAdded:Connect(function(item)
-        task.wait(0.2) 
-        sellItem(item)
+        task.wait(0.3) 
+        queueItemForSale(item)
     end)
 end
 
@@ -152,13 +170,14 @@ ShopTab:CreateToggle({
    Callback = function(Value)
        _G.AutoSell = Value
        if Value then
-           -- Продаємо те, що вже є в інвентарі
            local backpack = player:FindFirstChild("Backpack")
            if backpack then
                for _, item in ipairs(backpack:GetChildren()) do
-                   task.spawn(sellItem, item)
+                   queueItemForSale(item)
                end
            end
+       else
+           sellQueue = {} -- Очищаємо чергу, якщо вимкнули
        end
    end,
 })
@@ -177,7 +196,8 @@ ShopTab:CreateToggle({
                    if remote then
                        remote:FireServer("PurchaseShopItem", {["ItemName"] = "1x Lucky Arrow"})
                    end
-                   task.wait(2.5) 
+                   -- Рандомна затримка від 2.5 до 4 сек, щоб обійти анти-чіт
+                   task.wait(2.5 + math.random() * 1.5) 
                end
            end)
        end
@@ -189,8 +209,10 @@ ShopTab:CreateToggle({
 -- ====================
 _G.ItemFarm = false
 _G.ItemESP = false
-_G.StepDistance = 25  
-_G.StepDelay = 0.04   
+
+-- БЕЗПЕЧНІ СТАНДАРТНІ ЗНАЧЕННЯ
+_G.StepDistance = 15  
+_G.StepDelay = 0.06   
 
 local bannedCoordinates = {} 
 local espObjects = {}
@@ -298,11 +320,13 @@ local function antiKickMove(targetCFrame)
     end
 end
 
+FarmTab:CreateLabel("⚠️ УВАГА: Великі значення призводять до кіку!")
+
 FarmTab:CreateSlider({
-   Name = "Дистанція кроку (Step Distance)",
-   Range = {5, 35}, 
+   Name = "Дистанція кроку (Безпечно: 10-18)",
+   Range = {5, 30}, 
    Increment = 1,
-   CurrentValue = 25,
+   CurrentValue = 15,
    Flag = "StepDist_Slider", 
    Callback = function(Value)
        _G.StepDistance = Value
@@ -310,10 +334,10 @@ FarmTab:CreateSlider({
 })
 
 FarmTab:CreateSlider({
-   Name = "Затримка кроку (Step Delay)",
-   Range = {0.01, 0.2},
+   Name = "Затримка кроку (Безпечно: 0.05-0.10)",
+   Range = {0.02, 0.2},
    Increment = 0.01,
-   CurrentValue = 0.04,
+   CurrentValue = 0.06,
    Flag = "StepDelay_Slider", 
    Callback = function(Value)
        _G.StepDelay = Value
@@ -321,7 +345,7 @@ FarmTab:CreateSlider({
 })
 
 FarmTab:CreateToggle({
-   Name = "Увімкнути Глобальний ESP (Вся карта)",
+   Name = "Увімкнути Глобальний ESP",
    CurrentValue = false,
    Flag = "ESP_Toggle", 
    Callback = function(Value)
@@ -386,15 +410,16 @@ FarmTab:CreateToggle({
                    end
                    
                    if targetItem then
-                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 0.5, 0)
+                       -- Додав невеликий офсет вверх, щоб не чіплятися за землю (теж зменшує кіки)
+                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 1.5, 0)
                        local targetPos = targetItem.part.Position
                        
                        antiKickMove(targetCFrame)
-                       task.wait(0.12)
+                       task.wait(0.2) -- Збільшив затримку зупинки перед підбиранням
                        
                        targetItem.prompt.RequiresLineOfSight = false
                        fireproximityprompt(targetItem.prompt)
-                       task.wait(0.3) 
+                       task.wait(0.4) -- Збільшив затримку підбирання
                        
                        if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
                            table.insert(bannedCoordinates, targetPos) 
