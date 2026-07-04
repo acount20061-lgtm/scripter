@@ -1,6 +1,7 @@
 -- Чекаємо повного завантаження
 repeat task.wait() until game:IsLoaded()
 
+local player = game.Players.LocalPlayer
 local autoLoadFile = "YBA_AutoLoad.txt"
 local shouldAutoLoad = false
 
@@ -40,7 +41,11 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Головна", 4483362458)
 local FarmTab = Window:CreateTab("Автофарм", 4483362534)
+local ShopTab = Window:CreateTab("Магазин", 4483362458) -- Нова вкладка
 
+-- ====================
+-- Вкладка ГОЛОВНА
+-- ====================
 MainTab:CreateSection("Налаштування конфігу")
 
 MainTab:CreateToggle({
@@ -93,6 +98,95 @@ MainTab:CreateSlider({
    end,
 })
 
+-- ====================
+-- Вкладка МАГАЗИН (Логіка друга)
+-- ====================
+_G.AutoSell = false
+_G.AutoBuy = false
+
+-- Функція продажу
+local function sellItem(item)
+    if not _G.AutoSell then return end
+    if not item or not item:IsA("Tool") or item.Name == "Lucky Arrow" then return end
+    
+    local character = player.Character
+    local remote = character and character:FindFirstChild("RemoteEvent")
+    local hum = character and character:FindFirstChild("Humanoid")
+    
+    if remote and hum then
+        hum:EquipTool(item)
+        task.wait(0.15) 
+        remote:FireServer("EndDialogue", {
+            ["Option"] = "Option1", 
+            ["Dialogue"] = "Dialogue5", 
+            ["NPC"] = "Merchant"
+        })
+    end
+end
+
+-- Моніторинг рюкзака
+local function setupBackpackListener(backpack)
+    for _, item in ipairs(backpack:GetChildren()) do
+        task.spawn(sellItem, item)
+    end
+    backpack.ChildAdded:Connect(function(item)
+        task.wait(0.2) 
+        sellItem(item)
+    end)
+end
+
+player.ChildAdded:Connect(function(child)
+    if child.Name == "Backpack" then
+        setupBackpackListener(child)
+    end
+end)
+
+if player:FindFirstChild("Backpack") then
+    setupBackpackListener(player.Backpack)
+end
+
+ShopTab:CreateToggle({
+   Name = "Автопродаж (Крім Lucky Arrow)",
+   CurrentValue = false,
+   Flag = "AutoSell_Toggle",
+   Callback = function(Value)
+       _G.AutoSell = Value
+       if Value then
+           -- Продаємо те, що вже є в інвентарі
+           local backpack = player:FindFirstChild("Backpack")
+           if backpack then
+               for _, item in ipairs(backpack:GetChildren()) do
+                   task.spawn(sellItem, item)
+               end
+           end
+       end
+   end,
+})
+
+ShopTab:CreateToggle({
+   Name = "Автокупівля (Lucky Arrow)",
+   CurrentValue = false,
+   Flag = "AutoBuy_Toggle",
+   Callback = function(Value)
+       _G.AutoBuy = Value
+       if Value then
+           task.spawn(function()
+               while _G.AutoBuy do
+                   local char = player.Character
+                   local remote = char and char:FindFirstChild("RemoteEvent")
+                   if remote then
+                       remote:FireServer("PurchaseShopItem", {["ItemName"] = "1x Lucky Arrow"})
+                   end
+                   task.wait(2.5) 
+               end
+           end)
+       end
+   end,
+})
+
+-- ====================
+-- Вкладка АВТОФАРМ
+-- ====================
 _G.ItemFarm = false
 _G.ItemESP = false
 _G.StepDistance = 25  
@@ -177,7 +271,7 @@ task.spawn(function()
 end)
 
 local function antiKickMove(targetCFrame)
-    local char = game.Players.LocalPlayer.Character
+    local char = player.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
     
@@ -245,7 +339,7 @@ FarmTab:CreateToggle({
            task.spawn(function()
                while _G.ItemFarm do
                    task.wait(0.1) 
-                   local char = game.Players.LocalPlayer.Character
+                   local char = player.Character
                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
                    if not hrp then task.wait(0.5) continue end
                    
@@ -282,8 +376,8 @@ FarmTab:CreateToggle({
                                    if targetPart and targetPart.Transparency < 1 and not isCoordinateBanned(targetPart.Position) then
                                        local dist = (hrp.Position - targetPart.Position).Magnitude
                                        if dist < shortestDistance then
-                                           shortestDistance = dist
-                                           targetItem = {prompt = desc, part = targetPart, parent = parent}
+                                            shortestDistance = dist
+                                            targetItem = {prompt = desc, part = targetPart, parent = parent}
                                        end
                                    end
                                end
@@ -336,16 +430,15 @@ for _, itemName in ipairs(sortedItems) do
    })
 end
 
--- Перевіряємо, чи існує сам файл конфігу Rayfield перед завантаженням
+-- ====================
+-- АВТОЗАВАНТАЖЕННЯ КОНФІГУ
+-- ====================
 if shouldAutoLoad then
     pcall(function()
-        -- Назва файлу, яку створює Rayfield
         local configPath = "UAKillerHub/YBA_Config.json" 
-        -- Якщо файл існує (в тебе експлойт підтримує isfile), тоді завантажуємо
         if (isfile and isfile(configPath)) or not isfile then
             Rayfield:LoadConfiguration()
         else
-            -- Якщо файлу нема, вимикаємо автозавантаження, щоб не було проблем наступного разу
             if writefile then writefile(autoLoadFile, "false") end
         end
     end)
