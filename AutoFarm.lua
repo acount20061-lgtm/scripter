@@ -5,9 +5,9 @@ local Window = Rayfield:CreateWindow({
    LoadingTitle = "Завантаження фінальної версії...",
    LoadingSubtitle = "by acount20061-lgtm",
    ConfigurationSaving = { 
-       Enabled = true, -- УВІМКНЕНО
-       FolderName = "UAKillerHub", -- Папка в workspace твого експлойта
-       FileName = "YBA_Config" -- Назва файлу збереження
+       Enabled = true, 
+       FolderName = "UAKillerHub", 
+       FileName = "YBA_Config" 
    }
 })
 
@@ -29,7 +29,7 @@ MainTab:CreateSlider({
    Range = {50, 200},
    Increment = 1,
    CurrentValue = 50,
-   Flag = "JumpPower_Slider", -- ДОДАНО для збереження
+   Flag = "JumpPower_Slider", 
    Callback = function(Value)
        JP_Value = Value
    end,
@@ -40,9 +40,8 @@ _G.ItemESP = false
 _G.StepDistance = 25  
 _G.StepDelay = 0.04   
 
-local bannedCoordinates = {} -- База забанених пасток/координат
+local bannedCoordinates = {} 
 local espObjects = {}
-local lastPickedCFrame = nil 
 
 _G.SelectedItems = {
     ["Ancient Scroll"] = false,
@@ -70,7 +69,6 @@ _G.SelectedItems = {
     ["Zeppeli's Hat"] = false
 }
 
--- Функція перевірки, чи координата не забанена
 local function isCoordinateBanned(pos)
     for _, bannedPos in ipairs(bannedCoordinates) do
         if (pos - bannedPos).Magnitude < 3 then 
@@ -80,7 +78,6 @@ local function isCoordinateBanned(pos)
     return false
 end
 
--- Розумний ESP
 local function applyESP(part, name)
     if espObjects[part] then return end
     if not part or part.Transparency == 1 or isCoordinateBanned(part.Position) then return end
@@ -136,7 +133,6 @@ task.spawn(function()
     end
 end)
 
--- Покроковий рух
 local function antiKickMove(targetCFrame)
     local char = game.Players.LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -170,7 +166,7 @@ FarmTab:CreateSlider({
    Range = {5, 40},
    Increment = 1,
    CurrentValue = 25,
-   Flag = "StepDist_Slider", -- ДОДАНО для збереження
+   Flag = "StepDist_Slider", 
    Callback = function(Value)
        _G.StepDistance = Value
    end,
@@ -181,7 +177,7 @@ FarmTab:CreateSlider({
    Range = {0.01, 0.2},
    Increment = 0.01,
    CurrentValue = 0.04,
-   Flag = "StepDelay_Slider", -- ДОДАНО для збереження
+   Flag = "StepDelay_Slider", 
    Callback = function(Value)
        _G.StepDelay = Value
    end,
@@ -190,7 +186,7 @@ FarmTab:CreateSlider({
 FarmTab:CreateToggle({
    Name = "Увімкнути Глобальний ESP (Вся карта)",
    CurrentValue = false,
-   Flag = "ESP_Toggle", -- ДОДАНО для збереження
+   Flag = "ESP_Toggle", 
    Callback = function(Value)
        _G.ItemESP = Value
    end,
@@ -204,14 +200,10 @@ FarmTab:CreateToggle({
        _G.ItemFarm = Value
        if Value then
            task.spawn(function()
-               local char = game.Players.LocalPlayer.Character
-               local hrp = char and char:FindFirstChild("HumanoidRootPart")
-               if hrp then lastPickedCFrame = hrp.CFrame end 
-               
                while _G.ItemFarm do
-                   task.wait(0.1) -- ВИПРАВЛЕНО: Додано затримку, щоб гра не зависала (crash fix)
-                   char = game.Players.LocalPlayer.Character
-                   hrp = char and char:FindFirstChild("HumanoidRootPart")
+                   task.wait(0.1) 
+                   local char = game.Players.LocalPlayer.Character
+                   local hrp = char and char:FindFirstChild("HumanoidRootPart")
                    if not hrp then task.wait(0.5) continue end
                    
                    local anySelected = false
@@ -267,6 +259,7 @@ FarmTab:CreateToggle({
                        fireproximityprompt(targetItem.prompt)
                        task.wait(0.3) 
                        
+                       -- Якщо після кліку предмет не зник (можливо це пастка/багнутий об'єкт)
                        if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
                            table.insert(bannedCoordinates, targetPos) 
                            
@@ -274,20 +267,10 @@ FarmTab:CreateToggle({
                                espObjects[targetItem.part]:Destroy()
                                espObjects[targetItem.part] = nil
                            end
-                           
-                           if lastPickedCFrame then
-                               antiKickMove(lastPickedCFrame)
-                           end
-                       else
-                           lastPickedCFrame = targetCFrame
+                           -- Тепер ми НЕ втікаємо назад, а просто стоїмо і ігноруємо цю точку в майбутньому
                        end
                    else
-                       if lastPickedCFrame then
-                           local distToLast = (hrp.Position - lastPickedCFrame.Position).Magnitude
-                           if distToLast > 5 then
-                               antiKickMove(lastPickedCFrame)
-                           end
-                       end
+                       -- Якщо предметів на карті немає, ми просто чекаємо на місці (нікуди не повертаємось)
                        task.wait(0.5) 
                    end
                end
@@ -306,12 +289,12 @@ for _, itemName in ipairs(sortedItems) do
    FarmTab:CreateToggle({
        Name = itemName,
        CurrentValue = false,
-       Flag = "Filter_" .. itemName, -- ДОДАНО для збереження кожного предмета
+       Flag = "Filter_" .. itemName, 
        Callback = function(Value)
            _G.SelectedItems[itemName] = Value
        end,
    })
 end
 
--- ЗАВАНТАЖЕННЯ КОНФІГУ: Це завантажить усі збережені прапорці (Flags)
+-- Автозавантаження збережених налаштувань
 Rayfield:LoadConfiguration()
