@@ -1,3 +1,14 @@
+local autoLoadFile = "YBA_AutoLoad.txt"
+local shouldAutoLoad = false
+
+-- Перевіряємо, чи існує наш незалежний файл для автозавантаження
+if isfile and isfile(autoLoadFile) then
+    shouldAutoLoad = readfile(autoLoadFile) == "true"
+else
+    -- Якщо файлу немає (перший запуск), створюємо його і ставимо false (вимкнено) для безпеки
+    if writefile then writefile(autoLoadFile, "false") end
+end
+
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
@@ -13,6 +24,36 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Головна", 4483362458)
 local FarmTab = Window:CreateTab("Автофарм", 4483362534)
+
+-- === НАЛАШТУВАННЯ ЗАВАНТАЖЕННЯ ===
+MainTab:CreateSection("Налаштування конфігу")
+
+MainTab:CreateToggle({
+   Name = "Автозавантаження конфігу при старті",
+   CurrentValue = shouldAutoLoad,
+   Callback = function(Value)
+       -- Зберігаємо вибір у незалежний файл
+       if writefile then
+           writefile(autoLoadFile, tostring(Value))
+       end
+   end,
+})
+
+MainTab:CreateButton({
+   Name = "Завантажити конфіг вручну",
+   Callback = function()
+       Rayfield:LoadConfiguration()
+       Rayfield:Notify({
+           Title = "Успіх",
+           Content = "Конфіг успішно завантажено!",
+           Duration = 3,
+           Image = 4483362458,
+       })
+   end,
+})
+
+MainTab:CreateSection("Характеристики")
+-- =================================
 
 local JP_Value = 50
 task.spawn(function()
@@ -44,29 +85,14 @@ local bannedCoordinates = {}
 local espObjects = {}
 
 _G.SelectedItems = {
-    ["Ancient Scroll"] = false,
-    ["Blue Candy"] = false,
-    ["Caesar's Headband"] = false,
-    ["Christmas Present"] = false,
-    ["Clackers"] = false,
-    ["Diamond"] = false,
-    ["Dio's Diary"] = false,
-    ["Gold Coin"] = false,
-    ["Gold Umbrella"] = false,
-    ["Green Candy"] = false,
-    ["Lucky Arrow"] = false,
-    ["Lucky Stone Mask"] = false,
-    ["Mysterious Arrow"] = false,
-    ["Pure Rokakaka"] = false,
-    ["Quinton's Glove"] = false,
-    ["Red Candy"] = false,
-    ["Rib Cage of The Saint's Corpse"] = false,
-    ["Rokakaka"] = false,
-    ["Steel Ball"] = false,
-    ["Stone Mask"] = false,
-    ["Yellow Candy"] = false,
-    ["Zepellin's Headband"] = false,
-    ["Zeppeli's Hat"] = false
+    ["Ancient Scroll"] = false, ["Blue Candy"] = false, ["Caesar's Headband"] = false,
+    ["Christmas Present"] = false, ["Clackers"] = false, ["Diamond"] = false,
+    ["Dio's Diary"] = false, ["Gold Coin"] = false, ["Gold Umbrella"] = false,
+    ["Green Candy"] = false, ["Lucky Arrow"] = false, ["Lucky Stone Mask"] = false,
+    ["Mysterious Arrow"] = false, ["Pure Rokakaka"] = false, ["Quinton's Glove"] = false,
+    ["Red Candy"] = false, ["Rib Cage of The Saint's Corpse"] = false, ["Rokakaka"] = false,
+    ["Steel Ball"] = false, ["Stone Mask"] = false, ["Yellow Candy"] = false,
+    ["Zepellin's Headband"] = false, ["Zeppeli's Hat"] = false
 }
 
 local function isCoordinateBanned(pos)
@@ -161,9 +187,10 @@ local function antiKickMove(targetCFrame)
     end
 end
 
+-- Обмежив максимальний Range до 35, щоб було безпечніше
 FarmTab:CreateSlider({
    Name = "Дистанція кроку (Step Distance)",
-   Range = {5, 40},
+   Range = {5, 35}, 
    Increment = 1,
    CurrentValue = 25,
    Flag = "StepDist_Slider", 
@@ -259,7 +286,6 @@ FarmTab:CreateToggle({
                        fireproximityprompt(targetItem.prompt)
                        task.wait(0.3) 
                        
-                       -- Якщо після кліку предмет не зник (можливо це пастка/багнутий об'єкт)
                        if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
                            table.insert(bannedCoordinates, targetPos) 
                            
@@ -267,10 +293,8 @@ FarmTab:CreateToggle({
                                espObjects[targetItem.part]:Destroy()
                                espObjects[targetItem.part] = nil
                            end
-                           -- Тепер ми НЕ втікаємо назад, а просто стоїмо і ігноруємо цю точку в майбутньому
                        end
                    else
-                       -- Якщо предметів на карті немає, ми просто чекаємо на місці (нікуди не повертаємось)
                        task.wait(0.5) 
                    end
                end
@@ -296,5 +320,8 @@ for _, itemName in ipairs(sortedItems) do
    })
 end
 
--- Автозавантаження збережених налаштувань
-Rayfield:LoadConfiguration()
+-- === ФІНАЛЬНИЙ ЕТАП: АВТОЗАВАНТАЖЕННЯ ===
+-- Якщо перемикач з текстового файлу == true, завантажуємо конфіг
+if shouldAutoLoad then
+    Rayfield:LoadConfiguration()
+end
