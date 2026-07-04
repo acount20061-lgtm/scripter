@@ -34,7 +34,7 @@ if not RayfieldSuccess then return end
 local Window = Rayfield:CreateWindow({
    Name = "UA Killer Hub | YBA",
    LoadingTitle = "Завантаження...",
-   LoadingSubtitle = "by acount20061-lgtm | Tween Bypass",
+   LoadingSubtitle = "by acount20061-lgtm | Smooth Tween",
    ConfigurationSaving = { 
        Enabled = true, 
        FolderName = "UAKillerHub", 
@@ -96,7 +96,7 @@ MainTab:CreateSlider({
 })
 
 -- ====================
--- Вкладка МАГАЗИН (БЕЗПЕЧНА ЧЕРГА)
+-- Вкладка МАГАЗИН
 -- ====================
 _G.AutoSell = false
 _G.AutoBuy = false
@@ -200,11 +200,11 @@ ShopTab:CreateToggle({
 })
 
 -- ====================
--- Вкладка АВТОФАРМ (TWEEN СИСТЕМА)
+-- Вкладка АВТОФАРМ (ІДЕАЛЬНИЙ TWEEN)
 -- ====================
 _G.ItemFarm = false
 _G.ItemESP = false
-_G.TweenSpeed = 45 -- БЕЗПЕЧНА ШВИДКІСТЬ
+_G.TweenSpeed = 45 
 
 local bannedCoordinates = {} 
 local espObjects = {}
@@ -222,9 +222,7 @@ _G.SelectedItems = {
 
 local function isCoordinateBanned(pos)
     for _, bannedPos in ipairs(bannedCoordinates) do
-        if (pos - bannedPos).Magnitude < 3 then 
-            return true
-        end
+        if (pos - bannedPos).Magnitude < 3 then return true end
     end
     return false
 end
@@ -284,7 +282,6 @@ task.spawn(function()
     end
 end)
 
--- НОВА ФУНКЦІЯ ПЕРЕМІЩЕННЯ (TWEEN + NOCLIP)
 local noclipConnection
 local physicsConnection
 local currentTween
@@ -293,26 +290,34 @@ local function stopMovement()
     if currentTween then currentTween:Cancel(); currentTween = nil end
     if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
     if physicsConnection then physicsConnection:Disconnect(); physicsConnection = nil end
+    
+    -- Повертаємо фізику персонажу
+    local char = player.Character
+    if char and char:FindFirstChild("Humanoid") then
+        char.Humanoid.PlatformStand = false
+    end
 end
 
 local function antiKickTweenMove(targetCFrame)
     local char = player.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+    local hum = char and char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
     
-    stopMovement() -- Зупиняємо попередній рух, якщо був
+    stopMovement() 
+
+    -- СЕКРЕТ ПЕРШОГО ВІДЕО: Вимикаємо фізику ніг, щоб він не спотикався і не падав
+    hum.PlatformStand = true
 
     local startPos = hrp.Position
     local endPos = targetCFrame.Position
     local distance = (startPos - endPos).Magnitude
     
-    -- Розраховуємо час польоту залежно від вибраної швидкості
     local timeToTravel = distance / _G.TweenSpeed
     
     local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
     currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     
-    -- Вмикаємо NoClip та обнуляємо гравітацію/швидкість падіння
     noclipConnection = RunService.Stepped:Connect(function()
         if char then
             for _, part in ipairs(char:GetDescendants()) do
@@ -322,14 +327,18 @@ local function antiKickTweenMove(targetCFrame)
     end)
     
     physicsConnection = RunService.Heartbeat:Connect(function()
-        if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
+        if hrp then 
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0) 
+            -- Блокуємо обертання, щоб персонажа не крутило як дзиґу
+            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end
     end)
     
     currentTween:Play()
-    currentTween.Completed:Wait() -- Чекаємо поки долетить
+    currentTween.Completed:Wait() 
     
-    stopMovement() -- Вимикаємо NoClip після прибуття
-    task.wait(0.2) -- Затримка перед підбиранням (імітація гравця)
+    stopMovement() 
+    task.wait(0.2) 
 end
 
 FarmTab:CreateLabel("⚠️ Безпечна швидкість: 40-50")
@@ -411,17 +420,17 @@ FarmTab:CreateToggle({
                    end
                    
                    if targetItem then
-                       -- Трохи піднімаємо позицію, щоб не тертися об землю
-                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 1.5, 0)
+                       -- Підняв позицію ще вище (на 3 юніти), щоб ти гарантовано летів НАД землею
+                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 3, 0)
                        local targetPos = targetItem.part.Position
                        
                        antiKickTweenMove(targetCFrame)
                        
-                       if not _G.ItemFarm then break end -- Якщо вимкнули під час польоту
+                       if not _G.ItemFarm then break end 
                        
                        targetItem.prompt.RequiresLineOfSight = false
                        fireproximityprompt(targetItem.prompt)
-                       task.wait(0.4) -- Затримка підбирання
+                       task.wait(0.4) 
                        
                        if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
                            table.insert(bannedCoordinates, targetPos) 
@@ -435,7 +444,7 @@ FarmTab:CreateToggle({
                        task.wait(0.5) 
                    end
                end
-               stopMovement() -- Зупиняємо політ, якщо вимкнули тумблер
+               stopMovement() 
            end)
        else
            stopMovement()
@@ -460,9 +469,6 @@ for _, itemName in ipairs(sortedItems) do
    })
 end
 
--- ====================
--- АВТОЗАВАНТАЖЕННЯ КОНФІГУ
--- ====================
 if shouldAutoLoad then
     pcall(function()
         local configPath = "UAKillerHub/YBA_Config.json" 
