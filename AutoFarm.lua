@@ -2,6 +2,9 @@
 repeat task.wait() until game:IsLoaded()
 
 local player = game.Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
 local autoLoadFile = "YBA_AutoLoad.txt"
 local shouldAutoLoad = false
 
@@ -31,7 +34,7 @@ if not RayfieldSuccess then return end
 local Window = Rayfield:CreateWindow({
    Name = "UA Killer Hub | YBA",
    LoadingTitle = "Завантаження...",
-   LoadingSubtitle = "by acount20061-lgtm | Anti-Kick Bypass",
+   LoadingSubtitle = "by acount20061-lgtm | Tween Bypass",
    ConfigurationSaving = { 
        Enabled = true, 
        FolderName = "UAKillerHub", 
@@ -93,7 +96,7 @@ MainTab:CreateSlider({
 })
 
 -- ====================
--- Вкладка МАГАЗИН (БЕЗПЕЧНА ЧЕРГА ПРОДАЖУ)
+-- Вкладка МАГАЗИН (БЕЗПЕЧНА ЧЕРГА)
 -- ====================
 _G.AutoSell = false
 _G.AutoBuy = false
@@ -101,7 +104,6 @@ _G.AutoBuy = false
 local sellQueue = {}
 local isSelling = false
 
--- Безпечний обробник черги
 local function processSellQueue()
     if isSelling then return end
     isSelling = true
@@ -117,7 +119,7 @@ local function processSellQueue()
             
             if remote and hum then
                 hum:EquipTool(item)
-                task.wait(0.4) -- БЕЗПЕЧНА ЗАТРИМКА (Щоб сервер не подумав, що це спам)
+                task.wait(0.4) 
                 
                 remote:FireServer("EndDialogue", {
                     ["Option"] = "Option1", 
@@ -125,7 +127,7 @@ local function processSellQueue()
                     ["NPC"] = "Merchant"
                 })
                 
-                task.wait(0.25) -- Затримка після продажу перед наступним предметом
+                task.wait(0.3) 
             end
         end
     end
@@ -135,18 +137,14 @@ end
 local function queueItemForSale(item)
     if not _G.AutoSell then return end
     if not item or not item:IsA("Tool") or item.Name == "Lucky Arrow" then return end
-    
     table.insert(sellQueue, item)
     task.spawn(processSellQueue)
 end
 
 local function setupBackpackListener(backpack)
-    -- Додаємо все, що є, в чергу
     for _, item in ipairs(backpack:GetChildren()) do
         queueItemForSale(item)
     end
-    
-    -- Слухаємо нові предмети
     backpack.ChildAdded:Connect(function(item)
         task.wait(0.3) 
         queueItemForSale(item)
@@ -154,9 +152,7 @@ local function setupBackpackListener(backpack)
 end
 
 player.ChildAdded:Connect(function(child)
-    if child.Name == "Backpack" then
-        setupBackpackListener(child)
-    end
+    if child.Name == "Backpack" then setupBackpackListener(child) end
 end)
 
 if player:FindFirstChild("Backpack") then
@@ -177,7 +173,7 @@ ShopTab:CreateToggle({
                end
            end
        else
-           sellQueue = {} -- Очищаємо чергу, якщо вимкнули
+           sellQueue = {} 
        end
    end,
 })
@@ -196,7 +192,6 @@ ShopTab:CreateToggle({
                    if remote then
                        remote:FireServer("PurchaseShopItem", {["ItemName"] = "1x Lucky Arrow"})
                    end
-                   -- Рандомна затримка від 2.5 до 4 сек, щоб обійти анти-чіт
                    task.wait(2.5 + math.random() * 1.5) 
                end
            end)
@@ -205,14 +200,11 @@ ShopTab:CreateToggle({
 })
 
 -- ====================
--- Вкладка АВТОФАРМ
+-- Вкладка АВТОФАРМ (TWEEN СИСТЕМА)
 -- ====================
 _G.ItemFarm = false
 _G.ItemESP = false
-
--- БЕЗПЕЧНІ СТАНДАРТНІ ЗНАЧЕННЯ
-_G.StepDistance = 15  
-_G.StepDelay = 0.06   
+_G.TweenSpeed = 45 -- БЕЗПЕЧНА ШВИДКІСТЬ
 
 local bannedCoordinates = {} 
 local espObjects = {}
@@ -292,55 +284,64 @@ task.spawn(function()
     end
 end)
 
-local function antiKickMove(targetCFrame)
+-- НОВА ФУНКЦІЯ ПЕРЕМІЩЕННЯ (TWEEN + NOCLIP)
+local noclipConnection
+local physicsConnection
+local currentTween
+
+local function stopMovement()
+    if currentTween then currentTween:Cancel(); currentTween = nil end
+    if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
+    if physicsConnection then physicsConnection:Disconnect(); physicsConnection = nil end
+end
+
+local function antiKickTweenMove(targetCFrame)
     local char = player.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
     
+    stopMovement() -- Зупиняємо попередній рух, якщо був
+
     local startPos = hrp.Position
     local endPos = targetCFrame.Position
     local distance = (startPos - endPos).Magnitude
-    local steps = math.floor(distance / _G.StepDistance)
     
-    if steps > 0 then
-        for i = 1, steps do
-            if not _G.ItemFarm then break end
-            local alpha = i / steps
-            local nextPos = startPos:Lerp(endPos, alpha)
-            
-            hrp.CFrame = CFrame.new(nextPos)
-            hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-            task.wait(_G.StepDelay)
+    -- Розраховуємо час польоту залежно від вибраної швидкості
+    local timeToTravel = distance / _G.TweenSpeed
+    
+    local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+    currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    
+    -- Вмикаємо NoClip та обнуляємо гравітацію/швидкість падіння
+    noclipConnection = RunService.Stepped:Connect(function()
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanCollide = false end
+            end
         end
-    end
+    end)
     
-    if _G.ItemFarm then
-        hrp.CFrame = targetCFrame
-        hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-    end
+    physicsConnection = RunService.Heartbeat:Connect(function()
+        if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
+    end)
+    
+    currentTween:Play()
+    currentTween.Completed:Wait() -- Чекаємо поки долетить
+    
+    stopMovement() -- Вимикаємо NoClip після прибуття
+    task.wait(0.2) -- Затримка перед підбиранням (імітація гравця)
 end
 
-FarmTab:CreateLabel("⚠️ УВАГА: Великі значення призводять до кіку!")
+FarmTab:CreateLabel("⚠️ Безпечна швидкість: 40-50")
 
 FarmTab:CreateSlider({
-   Name = "Дистанція кроку (Безпечно: 10-18)",
-   Range = {5, 30}, 
+   Name = "Швидкість польоту (Tween Speed)",
+   Range = {20, 80}, 
    Increment = 1,
-   CurrentValue = 15,
-   Flag = "StepDist_Slider", 
+   CurrentValue = 45,
+   Flag = "TweenSpeed_Slider", 
    Callback = function(Value)
-       _G.StepDistance = Value
-   end,
-})
-
-FarmTab:CreateSlider({
-   Name = "Затримка кроку (Безпечно: 0.05-0.10)",
-   Range = {0.02, 0.2},
-   Increment = 0.01,
-   CurrentValue = 0.06,
-   Flag = "StepDelay_Slider", 
-   Callback = function(Value)
-       _G.StepDelay = Value
+       _G.TweenSpeed = Value
    end,
 })
 
@@ -410,16 +411,17 @@ FarmTab:CreateToggle({
                    end
                    
                    if targetItem then
-                       -- Додав невеликий офсет вверх, щоб не чіплятися за землю (теж зменшує кіки)
+                       -- Трохи піднімаємо позицію, щоб не тертися об землю
                        local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 1.5, 0)
                        local targetPos = targetItem.part.Position
                        
-                       antiKickMove(targetCFrame)
-                       task.wait(0.2) -- Збільшив затримку зупинки перед підбиранням
+                       antiKickTweenMove(targetCFrame)
+                       
+                       if not _G.ItemFarm then break end -- Якщо вимкнули під час польоту
                        
                        targetItem.prompt.RequiresLineOfSight = false
                        fireproximityprompt(targetItem.prompt)
-                       task.wait(0.4) -- Збільшив затримку підбирання
+                       task.wait(0.4) -- Затримка підбирання
                        
                        if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
                            table.insert(bannedCoordinates, targetPos) 
@@ -433,7 +435,10 @@ FarmTab:CreateToggle({
                        task.wait(0.5) 
                    end
                end
+               stopMovement() -- Зупиняємо політ, якщо вимкнули тумблер
            end)
+       else
+           stopMovement()
        end
    end,
 })
