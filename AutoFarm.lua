@@ -266,14 +266,6 @@ local function getCharacter()
     return char, hrp, hum
 end
 
-local function zeroHrpVelocity(hrp)
-    if not hrp then return end
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    hrp.AssemblyAngularVelocity = Vector3.zero
-    hrp.Velocity = Vector3.zero
-    hrp.RotVelocity = Vector3.zero
-end
-
 local function cleanupFlight()
     if not flightState then return end
 
@@ -282,17 +274,16 @@ local function cleanupFlight()
             flightState.tween:Cancel()
         end)
     end
-    if flightState.heartbeatConn then
-        flightState.heartbeatConn:Disconnect()
+    if flightState.noclipConn then
+        flightState.noclipConn:Disconnect()
     end
-    if flightState.proxy and flightState.proxy.Parent then
-        flightState.proxy:Destroy()
+    if flightState.weld and flightState.weld.Parent then
+        flightState.weld:Destroy()
     end
-    if flightState.hum and flightState.hum.Parent then
-        flightState.hum.PlatformStand = false
+    if flightState.platform and flightState.platform.Parent then
+        flightState.platform:Destroy()
     end
 
-    zeroHrpVelocity(flightState.hrp)
     flightState = nil
 end
 
@@ -303,9 +294,6 @@ local function stopFlight()
         noclipConnection:Disconnect()
         noclipConnection = nil
     end
-
-    local _, hrp = getCharacter()
-    zeroHrpVelocity(hrp)
 end
 
 local function ensureNoClip()
@@ -323,45 +311,49 @@ local function ensureNoClip()
 end
 
 local function tweenMoveToCFrame(targetCFrame, shouldContinue)
-    local _, hrp, hum = getCharacter()
-    if not hrp or not hum then return false end
+    local _, hrp = getCharacter()
+    if not hrp then return false end
 
     cleanupFlight()
-    ensureNoClip()
 
-    local proxy = Instance.new("Part")
-    proxy.Name = "YBA_MoveProxy"
-    proxy.Anchored = true
-    proxy.CanCollide = false
-    proxy.Transparency = 1
-    proxy.Size = Vector3.new(0.2, 0.2, 0.2)
-    proxy.CFrame = hrp.CFrame
-    proxy.Parent = workspace
+    local platform = Instance.new("Part")
+    platform.Name = "YBA_MovePlatform"
+    platform.Anchored = true
+    platform.CanCollide = false
+    platform.Transparency = 1
+    platform.Size = Vector3.new(3, 0.2, 3)
+    platform.CFrame = hrp.CFrame
+    platform.Parent = workspace
+
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = platform
+    weld.Part1 = hrp
+    weld.Parent = platform
+
+    local noclipConn = RunService.Stepped:Connect(function()
+        local char = player.Character
+        if not char then return end
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end)
 
     local distance = (targetCFrame.Position - hrp.Position).Magnitude
-    local TweenSpeed = _G.FlySpeed
-    local tweenTime = math.max(distance / TweenSpeed, 0.05)
+    local tweenTime = math.max(distance / _G.FlySpeed, 0.05)
 
     local tween = TweenService:Create(
-        proxy,
+        platform,
         TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
         { CFrame = targetCFrame }
     )
 
-    hum.PlatformStand = true
-
-    local heartbeatConn = RunService.Heartbeat:Connect(function()
-        if not hrp or not hrp.Parent or not proxy.Parent then return end
-        hrp.CFrame = proxy.CFrame
-        zeroHrpVelocity(hrp)
-    end)
-
     flightState = {
-        proxy = proxy,
+        platform = platform,
+        weld = weld,
         tween = tween,
-        heartbeatConn = heartbeatConn,
-        hum = hum,
-        hrp = hrp,
+        noclipConn = noclipConn,
     }
 
     tween:Play()
@@ -372,23 +364,22 @@ local function tweenMoveToCFrame(targetCFrame, shouldContinue)
     end)
 
     while not finished do
-        if shouldContinue and not shouldContinue() then
-            stopFlight()
+        if not _G.ItemFarm then
+            cleanupFlight()
             return false
         end
-        if not hrp or not hrp.Parent then
-            stopFlight()
+        if shouldContinue and not shouldContinue() then
+            cleanupFlight()
+            return false
+        end
+        if not hrp or not hrp.Parent or not platform.Parent then
+            cleanupFlight()
             return false
         end
         RunService.Heartbeat:Wait()
     end
 
-    if hrp and hrp.Parent and proxy.Parent then
-        hrp.CFrame = proxy.CFrame
-        zeroHrpVelocity(hrp)
-    end
-
-    stopFlight()
+    cleanupFlight()
     return true
 end
 
@@ -440,7 +431,7 @@ end
 local Window = Rayfield:CreateWindow({
     Name = "UA Killer Hub | YBA",
     LoadingTitle = "Завантаження...",
-    LoadingSubtitle = "by acount20061-lgtm | PERFECT FLY BYPASS+",
+    LoadingSubtitle = "by acount20061-lgtm | WELD PLATFORM BYPASS",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "UAKillerHub",
@@ -842,6 +833,6 @@ end
 
 Rayfield:Notify({
     Title = "UA Killer Hub",
-    Content = "Завантажено. Proxy TweenService bypass активний.",
+    Content = "Завантажено. Weld Platform bypass активний.",
     Duration = 4,
 })
