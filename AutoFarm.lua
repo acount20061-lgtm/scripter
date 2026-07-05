@@ -274,14 +274,11 @@ local function cleanupFlight()
             flightState.tween:Cancel()
         end)
     end
-    if flightState.noclipConn then
-        flightState.noclipConn:Disconnect()
+    if flightState.heartbeatConn then
+        flightState.heartbeatConn:Disconnect()
     end
-    if flightState.weld and flightState.weld.Parent then
-        flightState.weld:Destroy()
-    end
-    if flightState.platform and flightState.platform.Parent then
-        flightState.platform:Destroy()
+    if flightState.cframeValue then
+        flightState.cframeValue:Destroy()
     end
 
     flightState = nil
@@ -302,8 +299,9 @@ local function ensureNoClip()
         if not _G.ItemFarm and not _G.StandaloneNoClip then return end
         local char = player.Character
         if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
         for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
+            if part:IsA("BasePart") and part ~= hrp then
                 part.CanCollide = false
             end
         end
@@ -311,49 +309,43 @@ local function ensureNoClip()
 end
 
 local function tweenMoveToCFrame(targetCFrame, shouldContinue)
-    local _, hrp = getCharacter()
+    local char, hrp = getCharacter()
     if not hrp then return false end
 
     cleanupFlight()
 
-    local platform = Instance.new("Part")
-    platform.Name = "YBA_MovePlatform"
-    platform.Anchored = true
-    platform.CanCollide = false
-    platform.Transparency = 1
-    platform.Size = Vector3.new(3, 0.2, 3)
-    platform.CFrame = hrp.CFrame
-    platform.Parent = workspace
-
-    local weld = Instance.new("WeldConstraint")
-    weld.Part0 = platform
-    weld.Part1 = hrp
-    weld.Parent = platform
-
-    local noclipConn = RunService.Stepped:Connect(function()
-        local char = player.Character
-        if not char then return end
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end)
+    local cframeValue = Instance.new("CFrameValue")
+    cframeValue.Name = "YBA_VirtualCFrame"
+    cframeValue.Value = hrp.CFrame
+    cframeValue.Parent = player
 
     local distance = (targetCFrame.Position - hrp.Position).Magnitude
     local tweenTime = math.max(distance / _G.FlySpeed, 0.05)
 
     local tween = TweenService:Create(
-        platform,
+        cframeValue,
         TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-        { CFrame = targetCFrame }
+        { Value = targetCFrame }
     )
 
+    local heartbeatConn = RunService.Heartbeat:Connect(function()
+        if not char or not char.Parent then return end
+        local currentHrp = char:FindFirstChild("HumanoidRootPart")
+        if not currentHrp or not cframeValue.Parent then return end
+
+        currentHrp.CFrame = cframeValue.Value
+
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part ~= currentHrp then
+                part.CanCollide = false
+            end
+        end
+    end)
+
     flightState = {
-        platform = platform,
-        weld = weld,
+        cframeValue = cframeValue,
         tween = tween,
-        noclipConn = noclipConn,
+        heartbeatConn = heartbeatConn,
     }
 
     tween:Play()
@@ -372,11 +364,15 @@ local function tweenMoveToCFrame(targetCFrame, shouldContinue)
             cleanupFlight()
             return false
         end
-        if not hrp or not hrp.Parent or not platform.Parent then
+        if not hrp or not hrp.Parent then
             cleanupFlight()
             return false
         end
         RunService.Heartbeat:Wait()
+    end
+
+    if hrp and hrp.Parent and flightState and flightState.cframeValue then
+        hrp.CFrame = flightState.cframeValue.Value
     end
 
     cleanupFlight()
@@ -431,7 +427,7 @@ end
 local Window = Rayfield:CreateWindow({
     Name = "UA Killer Hub | YBA",
     LoadingTitle = "Завантаження...",
-    LoadingSubtitle = "by acount20061-lgtm | WELD PLATFORM BYPASS",
+    LoadingSubtitle = "by acount20061-lgtm | VIRTUAL CFRAME BYPASS",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "UAKillerHub",
@@ -833,6 +829,6 @@ end
 
 Rayfield:Notify({
     Title = "UA Killer Hub",
-    Content = "Завантажено. Weld Platform bypass активний.",
+    Content = "Завантажено. Virtual CFrame bypass активний.",
     Duration = 4,
 })
