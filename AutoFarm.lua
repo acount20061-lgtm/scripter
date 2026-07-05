@@ -77,11 +77,9 @@ local BAN_TTL = 45
 
 local farmThreadActive = false
 local farmStatusText = "Очікування..."
-local itemsCollected = 0
 
-local currentAlignPos
-local currentAlignOri
-local currentAttachment
+local currentBV
+local currentBG
 local noclipConnection
 local antiAfkConnection
 
@@ -275,9 +273,8 @@ local function getCharacter()
 end
 
 local function stopFlight()
-    if currentAlignPos then currentAlignPos:Destroy(); currentAlignPos = nil end
-    if currentAlignOri then currentAlignOri:Destroy(); currentAlignOri = nil end
-    if currentAttachment then currentAttachment:Destroy(); currentAttachment = nil end
+    if currentBV then currentBV:Destroy(); currentBV = nil end
+    if currentBG then currentBG:Destroy(); currentBG = nil end
 
     if noclipConnection and not _G.StandaloneNoClip then
         noclipConnection:Disconnect()
@@ -286,6 +283,8 @@ local function stopFlight()
 
     local _, hrp = getCharacter()
     if hrp then
+        hrp.Velocity = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
     end
@@ -312,60 +311,39 @@ local function smoothFlyTo(targetPart)
     stopFlight()
     ensureNoClip()
 
-    currentAttachment = Instance.new("Attachment")
-    currentAttachment.Parent = hrp
+    currentBV = Instance.new("BodyVelocity")
+    currentBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    currentBV.Velocity = Vector3.zero
+    currentBV.Parent = hrp
 
-    currentAlignPos = Instance.new("AlignPosition")
-    currentAlignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
-    currentAlignPos.Attachment0 = currentAttachment
-    currentAlignPos.MaxForce = math.huge
-    currentAlignPos.Responsiveness = 120
-    currentAlignPos.RigidityEnabled = false
-    currentAlignPos.Parent = hrp
+    currentBG = Instance.new("BodyGyro")
+    currentBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    currentBG.P = 9000
+    currentBG.D = 1000
+    currentBG.Parent = hrp
 
-    currentAlignOri = Instance.new("AlignOrientation")
-    currentAlignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
-    currentAlignOri.Attachment0 = currentAttachment
-    currentAlignOri.MaxTorque = math.huge
-    currentAlignOri.Responsiveness = 120
-    currentAlignOri.RigidityEnabled = false
-    currentAlignOri.Parent = hrp
-
-    local lastPos = hrp.Position
-    local stuckTimer = 0
-
-    while _G.ItemFarm and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
+    while _G.ItemFarm and hrp and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
         char, hrp = getCharacter()
         if not hrp then break end
 
         local targetPos = targetPart.Position + Vector3.new(0, _G.HoverHeight, 0)
-        local dist = (hrp.Position - targetPos).Magnitude
-
-        currentAlignPos.MaxVelocity = _G.FlySpeed
-        currentAlignPos.Position = targetPos
-        currentAlignOri.CFrame = CFrame.new(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
+        local currentPos = hrp.Position
+        local dist = (targetPos - currentPos).Magnitude
 
         if dist <= _G.PickupDistance then
-            return true
+            currentBV.Velocity = Vector3.zero
+            break
         end
 
-        local moved = (hrp.Position - lastPos).Magnitude
-        if moved < 0.35 then
-            stuckTimer += RunService.Heartbeat:Wait()
-            if stuckTimer > 1.75 then
-                hrp.CFrame = CFrame.new(hrp.Position + (targetPos - hrp.Position).Unit * 8, targetPos)
-                stuckTimer = 0
-            end
-        else
-            stuckTimer = 0
-        end
+        local direction = (targetPos - currentPos).Unit
+        currentBV.Velocity = direction * _G.FlySpeed
+        currentBG.CFrame = CFrame.new(currentPos, Vector3.new(targetPos.X, currentPos.Y, targetPos.Z))
 
-        lastPos = hrp.Position
         RunService.Heartbeat:Wait()
     end
 
     stopFlight()
-    return false
+    return targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart)
 end
 
 local function tryPickupItem(item)
@@ -571,12 +549,12 @@ ShopTab:CreateToggle({
 -- ====================
 -- АВТОФАРМ
 -- ====================
-local statusLabel = FarmTab:CreateLabel("Статус: Очікування... | Зібрано: 0")
+local statusLabel = FarmTab:CreateLabel("Статус: Очікування...")
 
 task.spawn(function()
     while task.wait(0.35) do
         pcall(function()
-            statusLabel:Set("Статус: " .. farmStatusText .. " | Зібрано: " .. itemsCollected)
+            statusLabel:Set("Статус: " .. farmStatusText)
         end)
     end
 end)
@@ -657,7 +635,6 @@ FarmTab:CreateToggle({
                 if arrived and targetItem.prompt:IsDescendantOf(workspace) then
                     setFarmStatus("Підбираю: " .. targetItem.name)
                     if tryPickupItem(targetItem) then
-                        itemsCollected += 1
                         banCoordinate(targetItem.position)
                         if espObjects[targetItem.part] then
                             espObjects[targetItem.part]:Destroy()
@@ -790,13 +767,6 @@ MiscTab:CreateButton({
     end,
 })
 
-MiscTab:CreateButton({
-    Name = "Скинути лічильник зібраних предметів",
-    Callback = function()
-        itemsCollected = 0
-    end,
-})
-
 if shouldAutoLoad then
     pcall(function()
         local configPath = "UAKillerHub/YBA_Config.json"
@@ -810,6 +780,6 @@ end
 
 Rayfield:Notify({
     Title = "UA Killer Hub",
-    Content = "Скрипт завантажено. Покращений політ, кеш предметів, Anti-AFK.",
+    Content = "Завантажено. Політ BodyVelocity як у Perfect Fly Bypass.",
     Duration = 4,
 })
