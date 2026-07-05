@@ -37,6 +37,7 @@ _G.ItemFarm = false
 _G.ItemESP = false
 _G.FlySpeed = 150
 _G.HoverHeight = 2.5
+_G.PickupHeight = 1
 _G.PickupDistance = 3.5
 _G.AntiAFK = false
 _G.StandaloneNoClip = false
@@ -304,10 +305,7 @@ local function ensureNoClip()
     end)
 end
 
-local function smoothFlyTo(targetPart)
-    local char, hrp = getCharacter()
-    if not hrp or not targetPart then return false end
-
+local function startFlight(hrp)
     stopFlight()
     ensureNoClip()
 
@@ -321,29 +319,73 @@ local function smoothFlyTo(targetPart)
     currentBG.P = 9000
     currentBG.D = 1000
     currentBG.Parent = hrp
+end
 
-    while _G.ItemFarm and hrp and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
-        char, hrp = getCharacter()
+local function moveBodyToward(targetPos, stopDistance, speed)
+    local _, hrp = getCharacter()
+    if not hrp or not currentBV or not currentBG then return false end
+
+    while _G.ItemFarm and hrp and currentBV.Parent do
+        _, hrp = getCharacter()
         if not hrp then break end
 
-        local targetPos = targetPart.Position + Vector3.new(0, _G.HoverHeight, 0)
         local currentPos = hrp.Position
         local dist = (targetPos - currentPos).Magnitude
 
-        if dist <= _G.PickupDistance then
+        if dist <= stopDistance then
             currentBV.Velocity = Vector3.zero
-            break
+            return true
         end
 
         local direction = (targetPos - currentPos).Unit
-        currentBV.Velocity = direction * _G.FlySpeed
+        currentBV.Velocity = direction * speed
         currentBG.CFrame = CFrame.new(currentPos, Vector3.new(targetPos.X, currentPos.Y, targetPos.Z))
 
         RunService.Heartbeat:Wait()
     end
 
+    return false
+end
+
+local function smoothFlyTo(targetPart)
+    local _, hrp = getCharacter()
+    if not hrp or not targetPart then return false end
+
+    startFlight(hrp)
+
+    local hoverPos = targetPart.Position + Vector3.new(0, _G.HoverHeight, 0)
+
+    while _G.ItemFarm and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
+        hoverPos = targetPart.Position + Vector3.new(0, _G.HoverHeight, 0)
+        if moveBodyToward(hoverPos, _G.PickupDistance, _G.FlySpeed) then
+            return true
+        end
+        RunService.Heartbeat:Wait()
+    end
+
     stopFlight()
-    return targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart)
+    return false
+end
+
+local function descendToItem(targetPart)
+    local _, hrp = getCharacter()
+    if not hrp or not targetPart then return false end
+
+    if not currentBV or not currentBV.Parent then
+        startFlight(hrp)
+    end
+
+    while _G.ItemFarm and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
+        local groundPos = targetPart.Position + Vector3.new(0, _G.PickupHeight, 0)
+        if moveBodyToward(groundPos, 1.25, _G.FlySpeed * 0.85) then
+            stopFlight()
+            return true
+        end
+        RunService.Heartbeat:Wait()
+    end
+
+    stopFlight()
+    return false
 end
 
 local function tryPickupItem(item)
@@ -569,12 +611,21 @@ FarmTab:CreateSlider({
 })
 
 FarmTab:CreateSlider({
-    Name = "Висота над предметом",
+    Name = "Висота над предметом (політ)",
     Range = { 1, 8 },
     Increment = 0.5,
     CurrentValue = 2.5,
     Flag = "HoverHeight_Slider",
     Callback = function(value) _G.HoverHeight = value end,
+})
+
+FarmTab:CreateSlider({
+    Name = "Висота при підборі (спуск)",
+    Range = { 0, 3 },
+    Increment = 0.5,
+    CurrentValue = 1,
+    Flag = "PickupHeight_Slider",
+    Callback = function(value) _G.PickupHeight = value end,
 })
 
 FarmTab:CreateSlider({
@@ -633,14 +684,20 @@ FarmTab:CreateToggle({
                 if not _G.ItemFarm then break end
 
                 if arrived and targetItem.prompt:IsDescendantOf(workspace) then
-                    setFarmStatus("Підбираю: " .. targetItem.name)
-                    if tryPickupItem(targetItem) then
-                        banCoordinate(targetItem.position)
-                        if espObjects[targetItem.part] then
-                            espObjects[targetItem.part]:Destroy()
-                            espObjects[targetItem.part] = nil
+                    setFarmStatus("Спускаюсь: " .. targetItem.name)
+                    local descended = descendToItem(targetItem.part)
+                    if not _G.ItemFarm then break end
+
+                    if descended and targetItem.prompt:IsDescendantOf(workspace) then
+                        setFarmStatus("Підбираю: " .. targetItem.name)
+                        if tryPickupItem(targetItem) then
+                            banCoordinate(targetItem.position)
+                            if espObjects[targetItem.part] then
+                                espObjects[targetItem.part]:Destroy()
+                                espObjects[targetItem.part] = nil
+                            end
+                            lastCacheRefresh = 0
                         end
-                        lastCacheRefresh = 0
                     end
                 end
 
@@ -780,6 +837,6 @@ end
 
 Rayfield:Notify({
     Title = "UA Killer Hub",
-    Content = "Завантажено. Політ BodyVelocity як у Perfect Fly Bypass.",
+    Content = "Завантажено. Політ зверху + спуск до предмета при підборі.",
     Duration = 4,
 })
