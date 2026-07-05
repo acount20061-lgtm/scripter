@@ -34,7 +34,7 @@ if not RayfieldSuccess then return end
 local Window = Rayfield:CreateWindow({
    Name = "UA Killer Hub | YBA",
    LoadingTitle = "Завантаження...",
-   LoadingSubtitle = "by acount20061-lgtm | Anchored Bypass",
+   LoadingSubtitle = "by acount20061-lgtm | FAST Tween Bypass",
    ConfigurationSaving = { 
        Enabled = true, 
        FolderName = "UAKillerHub", 
@@ -200,11 +200,11 @@ ShopTab:CreateToggle({
 })
 
 -- ====================
--- Вкладка АВТОФАРМ (БЕЗПЕЧНИЙ ANCHOR TWEEN)
+-- Вкладка АВТОФАРМ (МАКСИМАЛЬНА ШВИДКІСТЬ)
 -- ====================
 _G.ItemFarm = false
 _G.ItemESP = false
-_G.TweenSpeed = 50 
+_G.TweenSpeed = 175 -- ШВИДКІСТЬ ЯК НА ВІДЕО
 
 local bannedCoordinates = {} 
 local espObjects = {}
@@ -284,16 +284,12 @@ end)
 
 local noclipConnection
 local currentTween
+local currentBV
 
 local function stopMovement()
     if currentTween then currentTween:Cancel(); currentTween = nil end
     if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
-    
-    -- Обов'язково знімаємо заморозку після зупинки
-    local char = player.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        char.HumanoidRootPart.Anchored = false
-    end
+    if currentBV then currentBV:Destroy(); currentBV = nil end
 end
 
 local function antiKickTweenMove(targetCFrame)
@@ -303,22 +299,30 @@ local function antiKickTweenMove(targetCFrame)
     
     stopMovement() 
 
+    -- Створюємо нульову гравітацію, щоб летіти рівно
+    currentBV = Instance.new("BodyVelocity")
+    currentBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    currentBV.Velocity = Vector3.new(0, 0, 0)
+    currentBV.Parent = hrp
+
     local startPos = hrp.Position
     local endPos = targetCFrame.Position
     local distance = (startPos - endPos).Magnitude
     
+    -- Розрахунок часу для МАКСИМАЛЬНОЇ швидкості
     local timeToTravel = distance / _G.TweenSpeed
+    -- Запобіжник: якщо предмет дуже близько, летимо не менше 0.1 секунди, щоб не телепортувало миттєво (це кік)
+    if timeToTravel < 0.1 then timeToTravel = 0.1 end
     
     local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
     currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     
-    -- СЕКРЕТ З ПЕРШОГО ВІДЕО: Заморожуємо персонажа, щоб він не падав і став "статуєю"
-    hrp.Anchored = true
-    
     noclipConnection = RunService.Stepped:Connect(function()
         if char then
             for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = false end
+                if part:IsA("BasePart") then 
+                    part.CanCollide = false 
+                end
             end
         end
     end)
@@ -327,16 +331,16 @@ local function antiKickTweenMove(targetCFrame)
     currentTween.Completed:Wait() 
     
     stopMovement() 
-    task.wait(0.2) 
+    task.wait(0.1) -- Менша затримка після прильоту
 end
 
-FarmTab:CreateLabel("Рекомендована швидкість: 50-60")
+FarmTab:CreateLabel("Швидкість як на відео: 150-200")
 
 FarmTab:CreateSlider({
    Name = "Швидкість польоту (Tween Speed)",
-   Range = {20, 100}, 
-   Increment = 1,
-   CurrentValue = 50,
+   Range = {50, 350}, 
+   Increment = 5,
+   CurrentValue = 175, 
    Flag = "TweenSpeed_Slider", 
    Callback = function(Value)
        _G.TweenSpeed = Value
@@ -361,7 +365,7 @@ FarmTab:CreateToggle({
        if Value then
            task.spawn(function()
                while _G.ItemFarm do
-                   task.wait(0.1) 
+                   task.wait(0.05) -- Зменшив затримку циклу для більшої динаміки
                    local char = player.Character
                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
                    if not hrp then task.wait(0.5) continue end
@@ -409,8 +413,7 @@ FarmTab:CreateToggle({
                    end
                    
                    if targetItem then
-                       -- Повернув безпечну висоту (+2), щоб не тригерити захист від польотів
-                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 2, 0)
+                       local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 2.5, 0)
                        local targetPos = targetItem.part.Position
                        
                        antiKickTweenMove(targetCFrame)
@@ -419,7 +422,7 @@ FarmTab:CreateToggle({
                        
                        targetItem.prompt.RequiresLineOfSight = false
                        fireproximityprompt(targetItem.prompt)
-                       task.wait(0.4) 
+                       task.wait(0.2) -- Зменшив затримку після підбирання
                        
                        if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
                            table.insert(bannedCoordinates, targetPos) 
@@ -430,7 +433,7 @@ FarmTab:CreateToggle({
                            end
                        end
                    else
-                       task.wait(0.5) 
+                       task.wait(0.2) 
                    end
                end
                stopMovement() 
