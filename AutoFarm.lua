@@ -2,7 +2,6 @@
 repeat task.wait() until game:IsLoaded()
 
 local player = game.Players.LocalPlayer
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local autoLoadFile = "YBA_AutoLoad.txt"
@@ -34,7 +33,7 @@ if not RayfieldSuccess then return end
 local Window = Rayfield:CreateWindow({
    Name = "UA Killer Hub | YBA",
    LoadingTitle = "Завантаження...",
-   LoadingSubtitle = "by acount20061-lgtm | Smooth Bypass V2",
+   LoadingSubtitle = "by acount20061-lgtm | PERFECT FLY BYPASS",
    ConfigurationSaving = { 
        Enabled = true, 
        FolderName = "UAKillerHub", 
@@ -47,18 +46,15 @@ local FarmTab = Window:CreateTab("Автофарм", 4483362534)
 local ShopTab = Window:CreateTab("Магазин", 4483362458)
 
 -- ====================
--- ДОПОМІЖНІ ФУНКЦІЇ (ФІЛЬТРИ ТА БАЙПАС)
+-- ДОПОМІЖНІ ФУНКЦІЇ (ФІЛЬТРИ)
 -- ====================
 local bannedCoordinates = {} 
 local espObjects = {}
-local noclipConnection
-local currentTween
 
 -- Глибока перевірка: чи є предмет у когось в руках або в інвентарі
 local function isHeldByPlayer(obj)
     local current = obj
     while current and current ~= workspace do
-        -- Якщо предмет у моделі персонажа (Humanoid) або в бекпаку
         if (current:IsA("Model") and current:FindFirstChildOfClass("Humanoid")) or current:IsA("Backpack") then
             return true
         end
@@ -72,49 +68,6 @@ local function isCoordinateBanned(pos)
         if (pos - bannedPos).Magnitude < 3 then return true end
     end
     return false
-end
-
-local function stopMovement()
-    if currentTween then currentTween:Cancel(); currentTween = nil end
-    if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
-end
-
--- Справжній Bypass (Zero-Velocity + Noclip + Tween)
-local function antiKickTweenMove(targetCFrame)
-    local char = player.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    stopMovement() 
-
-    local startPos = hrp.Position
-    local endPos = targetCFrame.Position
-    local distance = (startPos - endPos).Magnitude
-    
-    local timeToTravel = distance / _G.TweenSpeed
-    if timeToTravel < 0.1 then timeToTravel = 0.1 end
-    
-    local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
-    currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
-    
-    -- Stepped Bypass: Робимо noclip і повністю прибираємо імпульс фізики, щоб не було дьоргання
-    noclipConnection = RunService.Stepped:Connect(function()
-        if char and hrp then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then 
-                    part.CanCollide = false 
-                end
-            end
-            -- Це і є байпас: гра думає, що ми падаємо зі швидкістю 0
-            hrp.Velocity = Vector3.new(0, 0, 0)
-            hrp.RotVelocity = Vector3.new(0, 0, 0)
-        end
-    end)
-    
-    currentTween:Play()
-    currentTween.Completed:Wait() 
-    
-    stopMovement() 
 end
 
 local function applyESP(part, name)
@@ -268,11 +221,11 @@ ShopTab:CreateToggle({
 })
 
 -- ====================
--- Вкладка АВТОФАРМ
+-- Вкладка АВТОФАРМ (ІДЕАЛЬНИЙ ПОЛІТ)
 -- ====================
 _G.ItemFarm = false
 _G.ItemESP = false
-_G.TweenSpeed = 175 
+_G.FlySpeed = 150 
 
 _G.SelectedItems = {
     ["Ancient Scroll"] = false, ["Blue Candy"] = false, ["Caesar's Headband"] = false,
@@ -315,13 +268,83 @@ task.spawn(function()
     end
 end)
 
+-- СИСТЕМА ІДЕАЛЬНОГО ПОЛЬОТУ
+local currentBV
+local currentBG
+local noclipConnection
+
+local function stopFlight()
+    if currentBV then currentBV:Destroy(); currentBV = nil end
+    if currentBG then currentBG:Destroy(); currentBG = nil end
+    if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
+    
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.Velocity = Vector3.new(0,0,0)
+        hrp.RotVelocity = Vector3.new(0,0,0)
+    end
+end
+
+local function smoothFlyTo(targetPart, targetCFrame)
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    stopFlight()
+
+    -- Створюємо тягу (BodyVelocity), яка плавно несе нас
+    currentBV = Instance.new("BodyVelocity")
+    currentBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    currentBV.Velocity = Vector3.new(0, 0, 0)
+    currentBV.Parent = hrp
+
+    -- Створюємо стабілізатор (BodyGyro), щоб нас не крутило
+    currentBG = Instance.new("BodyGyro")
+    currentBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    currentBG.P = 9000
+    currentBG.D = 1000
+    currentBG.Parent = hrp
+
+    -- Вимикаємо колізію (NoClip), щоб летіти крізь стіни
+    noclipConnection = RunService.Stepped:Connect(function()
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanCollide = false end
+            end
+        end
+    end)
+    
+    local targetPos = targetCFrame.Position
+    
+    -- Цикл польоту. Він оновлюється кожен мікро-кадр (Heartbeat), тому рух ідеально плавний
+    while _G.ItemFarm and hrp and targetPart and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
+        local currentPos = hrp.Position
+        local dist = (targetPos - currentPos).Magnitude
+        
+        -- Якщо долетіли - зупиняємось
+        if dist <= 3.5 then break end
+        
+        -- Направляємо вектор тяги до предмета
+        local direction = (targetPos - currentPos).Unit
+        currentBV.Velocity = direction * _G.FlySpeed
+        
+        -- Повертаємо персонажа лицем до цілі, але тримаємо рівно
+        currentBG.CFrame = CFrame.new(currentPos, Vector3.new(targetPos.X, currentPos.Y, targetPos.Z))
+        
+        RunService.Heartbeat:Wait()
+    end
+    
+    stopFlight()
+end
+
 FarmTab:CreateSlider({
-   Name = "Швидкість польоту",
+   Name = "Швидкість польоту (Fly Speed)",
    Range = {50, 350}, 
    Increment = 5,
-   CurrentValue = 175, 
-   Flag = "TweenSpeed_Slider", 
-   Callback = function(Value) _G.TweenSpeed = Value end,
+   CurrentValue = 150, 
+   Flag = "FlySpeed_Slider", 
+   Callback = function(Value) _G.FlySpeed = Value end,
 })
 
 FarmTab:CreateToggle({
@@ -340,7 +363,7 @@ FarmTab:CreateToggle({
        if Value then
            task.spawn(function()
                while _G.ItemFarm do
-                   task.wait(0.05) 
+                   task.wait(0.1) 
                    local char = player.Character
                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
                    if not hrp then task.wait(0.5) continue end
@@ -360,7 +383,7 @@ FarmTab:CreateToggle({
                            local parent = desc.Parent
                            local model = parent:IsA("Model") and parent or parent.Parent
                            
-                           -- Відкидаємо предмети, які хтось тримає (новий фільтр)
+                           -- ІГНОРУЄМО ПРЕДМЕТИ В РУКАХ ІНШИХ ГРАВЦІВ
                            if isHeldByPlayer(parent) then continue end
                            
                            local itemName = ""
@@ -387,32 +410,36 @@ FarmTab:CreateToggle({
                    end
                    
                    if targetItem then
+                       -- Висота як на першому відео (зависаємо над предметом)
                        local targetCFrame = targetItem.part.CFrame * CFrame.new(0, 2.5, 0)
                        local targetPos = targetItem.part.Position
                        
-                       antiKickTweenMove(targetCFrame)
+                       smoothFlyTo(targetItem.part, targetCFrame)
                        
                        if not _G.ItemFarm then break end 
                        
-                       targetItem.prompt.RequiresLineOfSight = false
-                       fireproximityprompt(targetItem.prompt)
-                       task.wait(0.2) 
-                       
-                       if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
-                           table.insert(bannedCoordinates, targetPos) 
-                           if espObjects[targetItem.part] then
-                               espObjects[targetItem.part]:Destroy()
-                               espObjects[targetItem.part] = nil
+                       -- Якщо після польоту предмет все ще є і його ніхто не вкрав
+                       if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) and not isHeldByPlayer(targetItem.prompt.Parent) then
+                           targetItem.prompt.RequiresLineOfSight = false
+                           fireproximityprompt(targetItem.prompt)
+                           task.wait(0.3) 
+                           
+                           if targetItem.prompt and targetItem.prompt:IsDescendantOf(workspace) then
+                               table.insert(bannedCoordinates, targetPos) 
+                               if espObjects[targetItem.part] then
+                                   espObjects[targetItem.part]:Destroy()
+                                   espObjects[targetItem.part] = nil
+                               end
                            end
                        end
                    else
                        task.wait(0.2) 
                    end
                end
-               stopMovement() 
+               stopFlight() 
            end)
        else
-           stopMovement()
+           stopFlight()
        end
    end,
 })
