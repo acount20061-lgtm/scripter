@@ -3,6 +3,7 @@ repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
@@ -79,8 +80,7 @@ local BAN_TTL = 45
 local farmThreadActive = false
 local farmStatusText = "Очікування..."
 
-local currentBV
-local currentBG
+local flightState
 local noclipConnection
 local antiAfkConnection
 
@@ -91,7 +91,7 @@ local function setFarmStatus(text)
     farmStatusText = text
 end
 
-local function isHeldByPlayer(obj)
+local function isInvalidItemPart(obj)
     if not obj then return true end
     local current = obj
     while current and current ~= workspace do
@@ -99,14 +99,7 @@ local function isHeldByPlayer(obj)
             return true
         end
         if current:IsA("Model") and current:FindFirstChildOfClass("Humanoid") then
-            local hum = current:FindFirstChildOfClass("Humanoid")
-            if hum and Players:GetPlayerFromCharacter(current) then
-                return true
-            end
-        end
-        if current:IsA("Tool") and current.Parent and current.Parent:IsA("Model") then
-            local owner = Players:GetPlayerFromCharacter(current.Parent)
-            if owner then return true end
+            return true
         end
         current = current.Parent
     end
@@ -164,7 +157,7 @@ local function resolveItemFromPrompt(desc)
     if not targetPart or targetPart.Transparency >= 1 then
         return nil
     end
-    if isCoordinateBanned(targetPart.Position) or isHeldByPlayer(targetPart) then
+    if isCoordinateBanned(targetPart.Position) or isInvalidItemPart(targetPart) then
         return nil
     end
     if not desc.Enabled then
@@ -220,7 +213,7 @@ local function getNearestItem(hrp)
     local shortest = math.huge
 
     for _, item in ipairs(refreshItemCache()) do
-        if item.prompt:IsDescendantOf(workspace) and not isHeldByPlayer(item.parent) then
+        if item.prompt:IsDescendantOf(workspace) and not isInvalidItemPart(item.parent) then
             local dist = (hrp.Position - item.position).Magnitude
             if dist < shortest then
                 shortest = dist
@@ -234,7 +227,7 @@ end
 
 local function applyESP(part, name)
     if espObjects[part] then return end
-    if not part or part.Transparency == 1 or isCoordinateBanned(part.Position) or isHeldByPlayer(part) then
+    if not part or part.Transparency == 1 or isCoordinateBanned(part.Position) or isInvalidItemPart(part) then
         return
     end
 
@@ -273,22 +266,46 @@ local function getCharacter()
     return char, hrp, hum
 end
 
-local function stopFlight()
-    if currentBV then currentBV:Destroy(); currentBV = nil end
-    if currentBG then currentBG:Destroy(); currentBG = nil end
+local function zeroHrpVelocity(hrp)
+    if not hrp then return end
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    hrp.Velocity = Vector3.zero
+    hrp.RotVelocity = Vector3.zero
+end
 
-    if noclipConnection and not _G.StandaloneNoClip then
+local function cleanupFlight()
+    if not flightState then return end
+
+    if flightState.tween then
+        pcall(function()
+            flightState.tween:Cancel()
+        end)
+    end
+    if flightState.heartbeatConn then
+        flightState.heartbeatConn:Disconnect()
+    end
+    if flightState.proxy and flightState.proxy.Parent then
+        flightState.proxy:Destroy()
+    end
+    if flightState.hum and flightState.hum.Parent then
+        flightState.hum.PlatformStand = false
+    end
+
+    zeroHrpVelocity(flightState.hrp)
+    flightState = nil
+end
+
+local function stopFlight()
+    cleanupFlight()
+
+    if noclipConnection and not _G.StandaloneNoClip and not _G.ItemFarm then
         noclipConnection:Disconnect()
         noclipConnection = nil
     end
 
     local _, hrp = getCharacter()
-    if hrp then
-        hrp.Velocity = Vector3.zero
-        hrp.RotVelocity = Vector3.zero
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-    end
+    zeroHrpVelocity(hrp)
 end
 
 local function ensureNoClip()
@@ -305,110 +322,104 @@ local function ensureNoClip()
     end)
 end
 
-local function startFlight(hrp)
-    stopFlight()
+local function tweenMoveToCFrame(targetCFrame, shouldContinue)
+    local _, hrp, hum = getCharacter()
+    if not hrp or not hum then return false end
+
+    cleanupFlight()
     ensureNoClip()
 
-    currentBV = Instance.new("BodyVelocity")
-    currentBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    currentBV.Velocity = Vector3.zero
-    currentBV.Parent = hrp
+    local proxy = Instance.new("Part")
+    proxy.Name = "YBA_MoveProxy"
+    proxy.Anchored = true
+    proxy.CanCollide = false
+    proxy.Transparency = 1
+    proxy.Size = Vector3.new(0.2, 0.2, 0.2)
+    proxy.CFrame = hrp.CFrame
+    proxy.Parent = workspace
 
-    currentBG = Instance.new("BodyGyro")
-    currentBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    currentBG.P = 9000
-    currentBG.D = 1000
-    currentBG.Parent = hrp
-end
+    local distance = (targetCFrame.Position - hrp.Position).Magnitude
+    local TweenSpeed = _G.FlySpeed
+    local tweenTime = math.max(distance / TweenSpeed, 0.05)
 
-local function moveBodyToward(targetPos, stopDistance, speed)
-    local _, hrp = getCharacter()
-    if not hrp or not currentBV or not currentBG then return false end
+    local tween = TweenService:Create(
+        proxy,
+        TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
+        { CFrame = targetCFrame }
+    )
 
-    while _G.ItemFarm and hrp and currentBV.Parent do
-        _, hrp = getCharacter()
-        if not hrp then break end
+    hum.PlatformStand = true
 
-        local currentPos = hrp.Position
-        local dist = (targetPos - currentPos).Magnitude
+    local heartbeatConn = RunService.Heartbeat:Connect(function()
+        if not hrp or not hrp.Parent or not proxy.Parent then return end
+        hrp.CFrame = proxy.CFrame
+        zeroHrpVelocity(hrp)
+    end)
 
-        if dist <= stopDistance then
-            currentBV.Velocity = Vector3.zero
-            return true
-        end
+    flightState = {
+        proxy = proxy,
+        tween = tween,
+        heartbeatConn = heartbeatConn,
+        hum = hum,
+        hrp = hrp,
+    }
 
-        local direction = (targetPos - currentPos).Unit
-        currentBV.Velocity = direction * speed
-        currentBG.CFrame = CFrame.new(currentPos, Vector3.new(targetPos.X, currentPos.Y, targetPos.Z))
+    tween:Play()
 
-        RunService.Heartbeat:Wait()
-    end
+    local finished = false
+    tween.Completed:Once(function()
+        finished = true
+    end)
 
-    return false
-end
-
-local function smoothFlyTo(targetPart)
-    local _, hrp = getCharacter()
-    if not hrp or not targetPart then return false end
-
-    startFlight(hrp)
-
-    local hoverPos = targetPart.Position + Vector3.new(0, _G.HoverHeight, 0)
-
-    while _G.ItemFarm and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
-        hoverPos = targetPart.Position + Vector3.new(0, _G.HoverHeight, 0)
-        if moveBodyToward(hoverPos, _G.PickupDistance, _G.FlySpeed) then
-            return true
-        end
-        RunService.Heartbeat:Wait()
-    end
-
-    stopFlight()
-    return false
-end
-
-local function descendToItem(targetPart)
-    local _, hrp = getCharacter()
-    if not hrp or not targetPart then return false end
-
-    if not currentBV or not currentBV.Parent then
-        startFlight(hrp)
-    end
-
-    while _G.ItemFarm and targetPart:IsDescendantOf(workspace) and not isHeldByPlayer(targetPart) do
-        local groundPos = targetPart.Position + Vector3.new(0, _G.PickupHeight, 0)
-        if moveBodyToward(groundPos, 1.25, _G.FlySpeed * 0.85) then
+    while not finished do
+        if shouldContinue and not shouldContinue() then
             stopFlight()
-            return true
+            return false
+        end
+        if not hrp or not hrp.Parent then
+            stopFlight()
+            return false
         end
         RunService.Heartbeat:Wait()
     end
 
+    if hrp and hrp.Parent and proxy.Parent then
+        hrp.CFrame = proxy.CFrame
+        zeroHrpVelocity(hrp)
+    end
+
     stopFlight()
-    return false
+    return true
+end
+
+local function moveToItem(targetPart)
+    if not targetPart or not targetPart:IsDescendantOf(workspace) then
+        return false
+    end
+
+    local hoverCFrame = CFrame.new(targetPart.Position + Vector3.new(0, _G.HoverHeight, 0))
+
+    return tweenMoveToCFrame(hoverCFrame, function()
+        return _G.ItemFarm
+            and targetPart:IsDescendantOf(workspace)
+            and not isInvalidItemPart(targetPart)
+    end)
 end
 
 local function tryPickupItem(item)
     if not item or not item.prompt or not item.prompt:IsDescendantOf(workspace) then
         return false
     end
-    if isHeldByPlayer(item.parent) then
+    if isInvalidItemPart(item.parent) then
         return false
     end
 
     item.prompt.RequiresLineOfSight = false
     item.prompt.HoldDuration = 0
+    fireproximityprompt(item.prompt, 0)
+    task.wait(0.2)
 
-    for _ = 1, 3 do
-        if not item.prompt:IsDescendantOf(workspace) then break end
-        fireproximityprompt(item.prompt, 0)
-        task.wait(0.15)
-        if not item.prompt:IsDescendantOf(workspace) or isHeldByPlayer(item.parent) then
-            return true
-        end
-    end
-
-    return not item.prompt:IsDescendantOf(workspace)
+    return not item.prompt:IsDescendantOf(workspace) or isInvalidItemPart(item.parent)
 end
 
 local function tryRespawn()
@@ -680,24 +691,18 @@ FarmTab:CreateToggle({
                 end
 
                 setFarmStatus("Лечу до: " .. targetItem.name)
-                local arrived = smoothFlyTo(targetItem.part)
+                local arrived = moveToItem(targetItem.part)
                 if not _G.ItemFarm then break end
 
                 if arrived and targetItem.prompt:IsDescendantOf(workspace) then
-                    setFarmStatus("Спускаюсь: " .. targetItem.name)
-                    local descended = descendToItem(targetItem.part)
-                    if not _G.ItemFarm then break end
-
-                    if descended and targetItem.prompt:IsDescendantOf(workspace) then
-                        setFarmStatus("Підбираю: " .. targetItem.name)
-                        if tryPickupItem(targetItem) then
-                            banCoordinate(targetItem.position)
-                            if espObjects[targetItem.part] then
-                                espObjects[targetItem.part]:Destroy()
-                                espObjects[targetItem.part] = nil
-                            end
-                            lastCacheRefresh = 0
+                    setFarmStatus("Підбираю: " .. targetItem.name)
+                    if tryPickupItem(targetItem) then
+                        banCoordinate(targetItem.position)
+                        if espObjects[targetItem.part] then
+                            espObjects[targetItem.part]:Destroy()
+                            espObjects[targetItem.part] = nil
                         end
+                        lastCacheRefresh = 0
                     end
                 end
 
@@ -837,6 +842,6 @@ end
 
 Rayfield:Notify({
     Title = "UA Killer Hub",
-    Content = "Завантажено. Політ зверху + спуск до предмета при підборі.",
+    Content = "Завантажено. Proxy TweenService bypass активний.",
     Duration = 4,
 })
