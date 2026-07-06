@@ -5,7 +5,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
-local PathfindingService = game:GetService("PathfindingService")
 
 local player = Players.LocalPlayer
 local autoLoadFile = "YBA_AutoLoad.txt"
@@ -410,59 +409,41 @@ local function moveToItemAndPickup(item)
     cleanupFlight()
     ensureNoClip()
 
-    local targetPosition = item.part.Position + Vector3.new(0, 0, 0)
-    local distance = (targetPosition - hrp.Position).Magnitude
-    
-    -- Use PathfindingService for safer navigation
-    local path = SafeCall(function()
-        return PathfindingService:CreatePath({
-            AgentRadius = 2,
-            AgentHeight = 5,
-            AgentCanJump = true
-        })
-    end)
-    
-    if not path then
-        -- Fallback to direct MoveTo if pathfinding fails
-        local moveSuccess = SafeCall(function()
-            hum:MoveTo(targetPosition)
-        end)
-        if not moveSuccess then return false end
-    else
-        local computeSuccess = SafeCall(function()
-            return path:ComputeAsync(hrp.Position, targetPosition)
-        end)
-        
-        if computeSuccess and path.Status == Enum.PathStatus.Success then
-            local waypoints = path:GetWaypoints()
-            for _, waypoint in ipairs(waypoints) do
-                if not _G.ItemFarm then
-                    cleanupFlight()
-                    return false
-                end
-                if not item.part:IsDescendantOf(workspace) then
-                    cleanupFlight()
-                    return false
-                end
-                
-                hum:MoveTo(waypoint.Position)
-                
-                -- Adaptive velocity damping for natural movement
-                local moveDistance = (waypoint.Position - hrp.Position).Magnitude
-                local adaptiveSpeed = math.min(_G.FlySpeed, moveDistance * 2)
-                hum.WalkSpeed = adaptiveSpeed
-                
-                hum.MoveToFinished:Wait()
-            end
-        else
-            -- Fallback to direct movement if pathfinding fails
-            hum:MoveTo(targetPosition)
-            hum.MoveToFinished:Wait()
-        end
-    end
+    local targetCFrame = CFrame.new(item.part.Position + Vector3.new(0, 1.2, 0))
+    local distance = (targetCFrame.Position - hrp.Position).Magnitude
+    local tweenTime = math.max(distance / _G.FlySpeed, 0.05)
 
-    -- Reset walk speed
-    hum.WalkSpeed = 16
+    local cframeValue = Instance.new("CFrameValue")
+    cframeValue.Name = "YBA_VirtualCFrame"
+    cframeValue.Value = hrp.CFrame
+    cframeValue.Parent = player
+
+    local tween = TweenService:Create(
+        cframeValue,
+        TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
+        { Value = targetCFrame }
+    )
+
+    local heartbeatConn = RunService.Heartbeat:Connect(function()
+        if not char or not char.Parent then return end
+        local currentHrp = char:FindFirstChild("HumanoidRootPart")
+        if not currentHrp or not cframeValue.Parent then return end
+
+        currentHrp.CFrame = cframeValue.Value
+        zeroHrpVelocity(currentHrp)
+
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part ~= currentHrp then
+                part.CanCollide = false
+            end
+        end
+    end)
+
+    flightState = {
+        cframeValue = cframeValue,
+        tween = tween,
+        heartbeatConn = heartbeatConn,
+    }
 
     local function shouldContinue()
         return _G.ItemFarm
@@ -471,9 +452,41 @@ local function moveToItemAndPickup(item)
             and item.prompt:IsDescendantOf(workspace)
     end
 
+    tween:Play()
+
+    local finished = false
+    tween.Completed:Once(function()
+        finished = true
+    end)
+
+    while not finished do
+        if not shouldContinue() then
+            cleanupFlight()
+            return false
+        end
+        if not hrp or not hrp.Parent then
+            cleanupFlight()
+            return false
+        end
+        RunService.Heartbeat:Wait()
+    end
+
     if not shouldContinue() then
         cleanupFlight()
         return false
+    end
+
+    targetCFrame = CFrame.new(item.part.Position + Vector3.new(0, 1.2, 0))
+    cframeValue.Value = targetCFrame
+
+    local currentHrp = char:FindFirstChild("HumanoidRootPart")
+    if currentHrp then
+        currentHrp.CFrame = targetCFrame
+        -- Strictly zero physics to prevent Error 267
+        SafeCall(function()
+            currentHrp.AssemblyLinearVelocity = Vector3.zero
+            currentHrp.AssemblyAngularVelocity = Vector3.zero
+        end)
     end
 
     task.wait(0.05)
