@@ -1,42 +1,67 @@
 --[[
-    Remote Spy
-    Intercepts FireServer / InvokeServer via __namecall hook.
-    Requires exploit environment: hookmetamethod, checkcaller, getnamecallmethod, setclipboard
+    Remote Spy (Aggressive)
+    Dual-hooks __namecall + FireServer/InvokeServer via hookfunction.
+    Requires: hookmetamethod, hookfunction, checkcaller, getnamecallmethod, setclipboard
 ]]
 
--- Ignore List: remotes matching these names (exact or partial) are not logged
+-- Optional manual ignore list (DISABLED by default — not used by hooks)
+-- Set USE_IGNORE_LIST = true and add exact remote names if you want to suppress specific spam
+local USE_IGNORE_LIST = false
 local IgnoreList = {
-    "CharacterSoundEvent",
-    "MouseClick",
-    "MouseHover",
-    "Heartbeat",
-    "Ping",
-    "ChatMessage",
-    "AnimationPlayed",
-    "Footstep",
-    "RunService",
+    -- "ExactRemoteNameOnly",
 }
 
 -- Services
-local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 
+-- Exploit safety wrappers
+local newcclosure = newcclosure or function(fn) return fn end
+local clonefunction = clonefunction or function(fn) return fn end
+
 -- Utilities
 local function isIgnored(remoteName: string): boolean
-    local lowerName = remoteName:lower()
+    if not USE_IGNORE_LIST then
+        return false
+    end
     for _, ignored in ipairs(IgnoreList) do
-        local lowerIgnored = ignored:lower()
-        if lowerName == lowerIgnored or lowerName:find(lowerIgnored, 1, true) then
+        if remoteName == ignored then
             return true
         end
     end
     return false
 end
 
+local function getRemoteIdentity(remote: any): (string, string, string)
+    if typeof(remote) == "Instance" then
+        local name = "Unknown"
+        local path = "Unknown"
+        local codePath = "nil"
+
+        pcall(function()
+            name = remote.Name
+        end)
+        pcall(function()
+            path = remote:GetFullName()
+            codePath = "game." .. path
+        end)
+
+        return name, path, codePath
+    end
+
+    local label = typeof(remote) .. ":" .. tostring(remote)
+    return label, label, tostring(remote)
+end
+
 local function instanceToCodePath(instance: Instance): string
-    return "game." .. instance:GetFullName()
+    local ok, fullName = pcall(function()
+        return instance:GetFullName()
+    end)
+    if ok then
+        return "game." .. fullName
+    end
+    return tostring(instance)
 end
 
 local function serializeForCode(value: any, depth: number?): string
@@ -128,7 +153,10 @@ local function formatArgDisplay(value: any, index: number): string
     local displayValue
 
     if valueType == "Instance" then
-        displayValue = value:GetFullName()
+        local ok, fullName = pcall(function()
+            return value:GetFullName()
+        end)
+        displayValue = ok and fullName or tostring(value)
     elseif valueType == "table" then
         local ok, encoded = pcall(function()
             return HttpService:JSONEncode(value)
@@ -216,7 +244,6 @@ Main.Parent = ScreenGui
 applyCorner(Main, 10)
 applyStroke(Main, Theme.Border, 1)
 
--- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Name = "TitleBar"
 TitleBar.Size = UDim2.new(1, 0, 0, 34)
@@ -275,7 +302,6 @@ CloseButton.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
--- Search / Filter
 local SearchBox = Instance.new("TextBox")
 SearchBox.Name = "SearchBox"
 SearchBox.BackgroundColor3 = Theme.Input
@@ -298,7 +324,6 @@ SearchPadding.PaddingLeft = UDim.new(0, 10)
 SearchPadding.PaddingRight = UDim.new(0, 10)
 SearchPadding.Parent = SearchBox
 
--- Log Scroller
 local ScrollFrame = Instance.new("ScrollingFrame")
 ScrollFrame.Name = "Logs"
 ScrollFrame.BackgroundColor3 = Theme.Surface
@@ -324,7 +349,6 @@ ListPadding.PaddingLeft = UDim.new(0, 8)
 ListPadding.PaddingRight = UDim.new(0, 8)
 ListPadding.Parent = ScrollFrame
 
--- Dragging
 local dragging = false
 local dragInput
 local dragStart
@@ -401,11 +425,10 @@ local function trimOldLogs()
     LogCountLabel.Text = tostring(#logs)
 end
 
-local function createLogEntry(remote: Instance, method: string, ...)
-    local remoteName = remote.Name
-    local remotePath = remote:GetFullName()
+local function createLogEntry(remote: any, method: string, ...)
+    local remoteName, remotePath, codePath = getRemoteIdentity(remote)
     local argsDisplay, argsCode = formatArgs(...)
-    local codeLine = string.format("%s:%s(%s)", instanceToCodePath(remote), method, argsCode)
+    local codeLine = string.format("%s:%s(%s)", codePath, method, argsCode)
     local methodColor = method == "FireServer" and Theme.FireServer or Theme.InvokeServer
 
     logCounter += 1
@@ -432,7 +455,6 @@ local function createLogEntry(remote: Instance, method: string, ...)
     EntryPadding.PaddingRight = UDim.new(0, 10)
     EntryPadding.Parent = Entry
 
-    -- Header row
     local Header = Instance.new("Frame")
     Header.BackgroundTransparency = 1
     Header.LayoutOrder = 1
@@ -491,7 +513,6 @@ local function createLogEntry(remote: Instance, method: string, ...)
         end)
     end)
 
-    -- Path
     local PathLabel = Instance.new("TextLabel")
     PathLabel.BackgroundTransparency = 1
     PathLabel.LayoutOrder = 2
@@ -505,7 +526,6 @@ local function createLogEntry(remote: Instance, method: string, ...)
     PathLabel.TextXAlignment = Enum.TextXAlignment.Left
     PathLabel.Parent = Entry
 
-    -- Arguments
     local ArgsLabel = Instance.new("TextLabel")
     ArgsLabel.BackgroundTransparency = 1
     ArgsLabel.LayoutOrder = 3
@@ -530,9 +550,96 @@ local function createLogEntry(remote: Instance, method: string, ...)
     trimOldLogs()
 end
 
--- Hook __namecall
+-- ============================================================================
+-- AGGRESSIVE HOOK LAYER
+-- ============================================================================
+
+local recentCalls: { [string]: number } = {}
+local DEDUP_WINDOW = 0.03
+
+local function buildCallSignature(remote: any, method: string, ...): string
+    local packed = table.pack(...)
+    local parts = { tostring(remote), method, tostring(packed.n) }
+
+    for i = 1, math.min(packed.n, 12) do
+        local arg = packed[i]
+        parts[#parts + 1] = typeof(arg) .. ":" .. tostring(arg)
+    end
+
+    return table.concat(parts, "\0")
+end
+
+local function isDuplicate(remote: any, method: string, ...): boolean
+    local signature = buildCallSignature(remote, method, ...)
+    local now = os.clock()
+    local lastSeen = recentCalls[signature]
+
+    recentCalls[signature] = now
+
+    if lastSeen and (now - lastSeen) < DEDUP_WINDOW then
+        return true
+    end
+
+    return false
+end
+
+local function queueLog(remote: any, method: string, ...)
+    if checkcaller() then
+        return
+    end
+
+    if USE_IGNORE_LIST and typeof(remote) == "Instance" then
+        local remoteName = "Unknown"
+        pcall(function()
+            remoteName = remote.Name
+        end)
+        if isIgnored(remoteName) then
+            return
+        end
+    end
+
+    if isDuplicate(remote, method, ...) then
+        return
+    end
+
+    local packed = table.pack(...)
+
+    task.spawn(function()
+        local ok, err = pcall(function()
+            createLogEntry(remote, method, table.unpack(packed, 1, packed.n))
+        end)
+
+        if not ok then
+            warn("[Remote Spy] createLogEntry failed:", err)
+        end
+    end)
+end
+
+-- Capture original function references BEFORE any other script hooks them
+local probeEvent = Instance.new("RemoteEvent")
+local probeFunction = Instance.new("RemoteFunction")
+local fireServerRef = clonefunction(probeEvent.FireServer)
+local invokeServerRef = clonefunction(probeFunction.InvokeServer)
+probeEvent:Destroy()
+probeFunction:Destroy()
+
+local oldFireServer
+local oldInvokeServer
 local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+
+-- Direct function hooks (catches remote.FireServer(remote, ...) and internal direct calls)
+oldFireServer = hookfunction(fireServerRef, newcclosure(function(self, ...)
+    queueLog(self, "FireServer", ...)
+    return oldFireServer(self, ...)
+end))
+
+oldInvokeServer = hookfunction(invokeServerRef, newcclosure(function(self, ...)
+    queueLog(self, "InvokeServer", ...)
+    return oldInvokeServer(self, ...)
+end))
+
+-- __namecall hook (catches remote:FireServer(...) / remote:InvokeServer(...))
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     if checkcaller() then
         return oldNamecall(self, ...)
     end
@@ -540,14 +647,10 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
 
     if method == "FireServer" or method == "InvokeServer" then
-        if typeof(self) == "Instance" and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
-            if not isIgnored(self.Name) then
-                task.spawn(createLogEntry, self, method, ...)
-            end
-        end
+        queueLog(self, method, ...)
     end
 
     return oldNamecall(self, ...)
-end)
+end))
 
-print("[Remote Spy] Loaded — logging FireServer & InvokeServer")
+print("[Remote Spy] Loaded — dual hooks active (__namecall + hookfunction)")
