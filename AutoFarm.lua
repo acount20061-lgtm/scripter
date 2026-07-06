@@ -7,6 +7,8 @@ local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 
+print("Script loaded, player found: " .. tostring(player))
+
 _G.AutoSell = false
 _G.AutoBuy = false
 _G.ItemFarm = false
@@ -346,10 +348,14 @@ player.ChildAdded:Connect(function(child)
 end)
 if player:FindFirstChild("Backpack") then setupBackpackListener(player.Backpack) end
 
+print("Creating GUI...")
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "UAKillerHub_GUI"
 screenGui.Parent = player:PlayerGui
 screenGui.ResetOnSpawn = false
+
+print("ScreenGui created and parented")
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
@@ -358,6 +364,8 @@ mainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
+
+print("MainFrame created")
 
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "TitleLabel"
@@ -582,3 +590,5 @@ task.spawn(function()
         end
     end
 end)
+
+print("UA Killer Hub | YBA - Script loaded successfully!")
