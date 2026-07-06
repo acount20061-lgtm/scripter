@@ -333,7 +333,7 @@ local function moveToItemAndPickup(item)
     cframeValue.Value = hrp.CFrame
     cframeValue.Parent = player
 
-    local targetCFrame = CFrame.new(item.part.Position)
+    local targetCFrame = CFrame.new(item.part.Position + Vector3.new(0, 1.2, 0))
     local distance = (targetCFrame.Position - hrp.Position).Magnitude
     local tweenTime = math.max(distance / _G.FlySpeed, 0.05)
 
@@ -376,11 +376,6 @@ local function moveToItemAndPickup(item)
     local finished = false
     tween.Completed:Once(function()
         finished = true
-        if shouldContinue() then
-            item.prompt.RequiresLineOfSight = false
-            item.prompt.HoldDuration = 0
-            fireproximityprompt(item.prompt, 0)
-        end
     end)
 
     while not finished do
@@ -398,6 +393,23 @@ local function moveToItemAndPickup(item)
     if not shouldContinue() then
         cleanupFlight()
         return false
+    end
+
+    targetCFrame = CFrame.new(item.part.Position + Vector3.new(0, 1.2, 0))
+    cframeValue.Value = targetCFrame
+
+    local currentHrp = char:FindFirstChild("HumanoidRootPart")
+    if currentHrp then
+        currentHrp.CFrame = targetCFrame
+        zeroHrpVelocity(currentHrp)
+    end
+
+    task.wait(0.03)
+
+    if shouldContinue() then
+        item.prompt.RequiresLineOfSight = false
+        item.prompt.HoldDuration = 0
+        fireproximityprompt(item.prompt, 0)
     end
 
     local pickedUp = not item.prompt:IsDescendantOf(workspace) or isInvalidItemPart(item.parent)
