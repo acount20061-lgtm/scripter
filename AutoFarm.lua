@@ -266,6 +266,12 @@ local function getCharacter()
     return char, hrp, hum
 end
 
+local function zeroHrpVelocity(hrp)
+    if not hrp then return end
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+end
+
 local function cleanupFlight()
     if not flightState then return end
 
@@ -308,7 +314,21 @@ local function ensureNoClip()
     end)
 end
 
-local function tweenMoveToCFrame(targetCFrame, shouldContinue)
+local function getPickupCFrame(targetPart)
+    return CFrame.new(targetPart.Position + Vector3.new(0, _G.PickupHeight, 0))
+end
+
+local function moveToItemAndPickup(item)
+    if not item or not item.part or not item.part:IsDescendantOf(workspace) then
+        return false
+    end
+    if not item.prompt or not item.prompt:IsDescendantOf(workspace) then
+        return false
+    end
+    if isInvalidItemPart(item.parent) then
+        return false
+    end
+
     local char, hrp = getCharacter()
     if not hrp then return false end
 
@@ -319,13 +339,14 @@ local function tweenMoveToCFrame(targetCFrame, shouldContinue)
     cframeValue.Value = hrp.CFrame
     cframeValue.Parent = player
 
-    local distance = (targetCFrame.Position - hrp.Position).Magnitude
+    local pickupCFrame = getPickupCFrame(item.part)
+    local distance = (pickupCFrame.Position - hrp.Position).Magnitude
     local tweenTime = math.max(distance / _G.FlySpeed, 0.05)
 
     local tween = TweenService:Create(
         cframeValue,
         TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-        { Value = targetCFrame }
+        { Value = pickupCFrame }
     )
 
     local heartbeatConn = RunService.Heartbeat:Connect(function()
@@ -334,6 +355,7 @@ local function tweenMoveToCFrame(targetCFrame, shouldContinue)
         if not currentHrp or not cframeValue.Parent then return end
 
         currentHrp.CFrame = cframeValue.Value
+        zeroHrpVelocity(currentHrp)
 
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") and part ~= currentHrp then
@@ -348,6 +370,13 @@ local function tweenMoveToCFrame(targetCFrame, shouldContinue)
         heartbeatConn = heartbeatConn,
     }
 
+    local function shouldContinue()
+        return _G.ItemFarm
+            and item.part:IsDescendantOf(workspace)
+            and not isInvalidItemPart(item.part)
+            and item.prompt:IsDescendantOf(workspace)
+    end
+
     tween:Play()
 
     local finished = false
@@ -356,11 +385,7 @@ local function tweenMoveToCFrame(targetCFrame, shouldContinue)
     end)
 
     while not finished do
-        if not _G.ItemFarm then
-            cleanupFlight()
-            return false
-        end
-        if shouldContinue and not shouldContinue() then
+        if not shouldContinue() then
             cleanupFlight()
             return false
         end
@@ -371,33 +396,11 @@ local function tweenMoveToCFrame(targetCFrame, shouldContinue)
         RunService.Heartbeat:Wait()
     end
 
-    if hrp and hrp.Parent and flightState and flightState.cframeValue then
-        hrp.CFrame = flightState.cframeValue.Value
-    end
+    pickupCFrame = getPickupCFrame(item.part)
+    cframeValue.Value = pickupCFrame
 
-    cleanupFlight()
-    return true
-end
-
-local function moveToItem(targetPart)
-    if not targetPart or not targetPart:IsDescendantOf(workspace) then
-        return false
-    end
-
-    local hoverCFrame = CFrame.new(targetPart.Position + Vector3.new(0, _G.HoverHeight, 0))
-
-    return tweenMoveToCFrame(hoverCFrame, function()
-        return _G.ItemFarm
-            and targetPart:IsDescendantOf(workspace)
-            and not isInvalidItemPart(targetPart)
-    end)
-end
-
-local function tryPickupItem(item)
-    if not item or not item.prompt or not item.prompt:IsDescendantOf(workspace) then
-        return false
-    end
-    if isInvalidItemPart(item.parent) then
+    if not shouldContinue() then
+        cleanupFlight()
         return false
     end
 
@@ -406,7 +409,12 @@ local function tryPickupItem(item)
     fireproximityprompt(item.prompt, 0)
     task.wait(0.2)
 
-    return not item.prompt:IsDescendantOf(workspace) or isInvalidItemPart(item.parent)
+    local pickedUp = not item.prompt:IsDescendantOf(workspace) or isInvalidItemPart(item.parent)
+
+    task.wait(0.5)
+
+    cleanupFlight()
+    return pickedUp
 end
 
 local function tryRespawn()
@@ -678,19 +686,13 @@ FarmTab:CreateToggle({
                 end
 
                 setFarmStatus("Лечу до: " .. targetItem.name)
-                local arrived = moveToItem(targetItem.part)
-                if not _G.ItemFarm then break end
-
-                if arrived and targetItem.prompt:IsDescendantOf(workspace) then
-                    setFarmStatus("Підбираю: " .. targetItem.name)
-                    if tryPickupItem(targetItem) then
-                        banCoordinate(targetItem.position)
-                        if espObjects[targetItem.part] then
-                            espObjects[targetItem.part]:Destroy()
-                            espObjects[targetItem.part] = nil
-                        end
-                        lastCacheRefresh = 0
+                if moveToItemAndPickup(targetItem) then
+                    banCoordinate(targetItem.position)
+                    if espObjects[targetItem.part] then
+                        espObjects[targetItem.part]:Destroy()
+                        espObjects[targetItem.part] = nil
                     end
+                    lastCacheRefresh = 0
                 end
 
                 task.wait(0.08)
