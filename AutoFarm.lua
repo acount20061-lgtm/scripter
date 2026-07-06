@@ -37,8 +37,6 @@ _G.AutoBuy = false
 _G.ItemFarm = false
 _G.ItemESP = false
 _G.FlySpeed = 150
-_G.HoverHeight = 2.5
-_G.PickupHeight = 1
 _G.PickupDistance = 3.5
 _G.AntiAFK = false
 _G.StandaloneNoClip = false
@@ -314,10 +312,6 @@ local function ensureNoClip()
     end)
 end
 
-local function getPickupCFrame(targetPart)
-    return CFrame.new(targetPart.Position + Vector3.new(0, _G.PickupHeight, 0))
-end
-
 local function moveToItemAndPickup(item)
     if not item or not item.part or not item.part:IsDescendantOf(workspace) then
         return false
@@ -339,14 +333,14 @@ local function moveToItemAndPickup(item)
     cframeValue.Value = hrp.CFrame
     cframeValue.Parent = player
 
-    local pickupCFrame = getPickupCFrame(item.part)
-    local distance = (pickupCFrame.Position - hrp.Position).Magnitude
+    local targetCFrame = CFrame.new(item.part.Position)
+    local distance = (targetCFrame.Position - hrp.Position).Magnitude
     local tweenTime = math.max(distance / _G.FlySpeed, 0.05)
 
     local tween = TweenService:Create(
         cframeValue,
         TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-        { Value = pickupCFrame }
+        { Value = targetCFrame }
     )
 
     local heartbeatConn = RunService.Heartbeat:Connect(function()
@@ -382,6 +376,11 @@ local function moveToItemAndPickup(item)
     local finished = false
     tween.Completed:Once(function()
         finished = true
+        if shouldContinue() then
+            item.prompt.RequiresLineOfSight = false
+            item.prompt.HoldDuration = 0
+            fireproximityprompt(item.prompt, 0)
+        end
     end)
 
     while not finished do
@@ -396,22 +395,12 @@ local function moveToItemAndPickup(item)
         RunService.Heartbeat:Wait()
     end
 
-    pickupCFrame = getPickupCFrame(item.part)
-    cframeValue.Value = pickupCFrame
-
     if not shouldContinue() then
         cleanupFlight()
         return false
     end
 
-    item.prompt.RequiresLineOfSight = false
-    item.prompt.HoldDuration = 0
-    fireproximityprompt(item.prompt, 0)
-    task.wait(0.2)
-
     local pickedUp = not item.prompt:IsDescendantOf(workspace) or isInvalidItemPart(item.parent)
-
-    task.wait(0.5)
 
     cleanupFlight()
     return pickedUp
@@ -614,24 +603,6 @@ FarmTab:CreateSlider({
     CurrentValue = 150,
     Flag = "FlySpeed_Slider",
     Callback = function(value) _G.FlySpeed = value end,
-})
-
-FarmTab:CreateSlider({
-    Name = "Висота над предметом (політ)",
-    Range = { 1, 8 },
-    Increment = 0.5,
-    CurrentValue = 2.5,
-    Flag = "HoverHeight_Slider",
-    Callback = function(value) _G.HoverHeight = value end,
-})
-
-FarmTab:CreateSlider({
-    Name = "Висота при підборі (спуск)",
-    Range = { 0, 3 },
-    Increment = 0.5,
-    CurrentValue = 1,
-    Flag = "PickupHeight_Slider",
-    Callback = function(value) _G.PickupHeight = value end,
 })
 
 FarmTab:CreateSlider({
