@@ -1,4 +1,4 @@
--- UA Killer Hub | YBA — покращена версія
+-- UA Killer Hub | YBA - Delta Compatible Version
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -7,30 +7,9 @@ local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
-local autoLoadFile = "YBA_AutoLoad.txt"
-local shouldAutoLoad = false
-
-pcall(function()
-    if makefolder and not isfolder("UAKillerHub") then
-        makefolder("UAKillerHub")
-    end
-end)
-
-pcall(function()
-    if isfile and isfile(autoLoadFile) then
-        shouldAutoLoad = (readfile(autoLoadFile) == "true")
-    elseif writefile then
-        writefile(autoLoadFile, "false")
-    end
-end)
-
-local RayfieldSuccess, Rayfield = pcall(function()
-    return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-end)
-if not RayfieldSuccess then return end
 
 -- ====================
--- ГЛОБАЛЬНІ НАЛАШТУВАННЯ
+-- GLOBAL SETTINGS
 -- ====================
 _G.AutoSell = false
 _G.AutoBuy = false
@@ -76,55 +55,14 @@ local CACHE_REFRESH_INTERVAL = 1.25
 local BAN_TTL = 45
 
 local farmThreadActive = false
-local farmStatusText = "Очікування..."
+local farmStatusText = "Waiting..."
 
 local flightState
 local noclipConnection
 local antiAfkConnection
 
 -- ====================
--- CAPABILITY SAFETY WRAPPER
--- ====================
-local function SafeCall(func, ...)
-    local success, result = pcall(func, ...)
-    if not success then
-        warn("[SafeCall Error]: " .. tostring(result))
-        return nil, result
-    end
-    return result
-end
-
--- ====================
--- REMOTE EVENT DEBOUNCE SYSTEM
--- ====================
-local remoteEventQueue = {}
-local lastRemoteFireTime = 0
-local REMOTE_DEBOUNCE_DELAY = 0.8
-
-local function safeFireRemote(remote, ...)
-    local now = tick()
-    local timeSinceLastFire = now - lastRemoteFireTime
-    
-    if timeSinceLastFire < REMOTE_DEBOUNCE_DELAY then
-        local waitTime = REMOTE_DEBOUNCE_DELAY - timeSinceLastFire
-        task.wait(waitTime)
-    end
-    
-    local success, err = pcall(function()
-        remote:FireServer(...)
-    end)
-    
-    lastRemoteFireTime = tick()
-    
-    if not success then
-        warn("[Remote Fire Error]: " .. tostring(err))
-        return false
-    end
-    return true
-end
-
--- ====================
--- ДОПОМІЖНІ ФУНКЦІЇ
+-- HELPER FUNCTIONS
 -- ====================
 local function setFarmStatus(text)
     farmStatusText = text
@@ -235,13 +173,7 @@ local function refreshItemCache()
     lastCacheRefresh = now
     table.clear(itemCache)
 
-    local workspaceDescendants = SafeCall(function()
-        return workspace:GetDescendants()
-    end)
-    
-    if not workspaceDescendants then return itemCache end
-
-    for _, desc in ipairs(workspaceDescendants) do
+    for _, desc in ipairs(workspace:GetDescendants()) do
         if desc:IsA("ProximityPrompt") then
             local item = resolveItemFromPrompt(desc)
             if item and shouldFarmItem(item.name) then
@@ -276,82 +208,58 @@ local function applyESP(part, name)
         return
     end
 
-    local bgui = SafeCall(function()
-        return Instance.new("BillboardGui")
-    end)
-    if not bgui then return end
-    
+    local bgui = Instance.new("BillboardGui")
     bgui.Name = "YBA_Item_ESP"
     bgui.AlwaysOnTop = true
     bgui.Size = UDim2.new(0, 140, 0, 32)
     bgui.Adornee = part
 
-    local text = SafeCall(function()
-        return Instance.new("TextLabel")
-    end)
-    if text then
-        text.Parent = bgui
-        text.BackgroundTransparency = 1
-        text.Size = UDim2.new(1, 0, 1, 0)
-        text.Text = name
-        text.TextColor3 = Color3.fromRGB(0, 255, 255)
-        text.TextSize = 14
-        text.Font = Enum.Font.GothamBold
-        text.TextStrokeTransparency = 0
-    end
+    local text = Instance.new("TextLabel")
+    text.Parent = bgui
+    text.BackgroundTransparency = 1
+    text.Size = UDim2.new(1, 0, 1, 0)
+    text.Text = name
+    text.TextColor3 = Color3.fromRGB(0, 255, 255)
+    text.TextSize = 14
+    text.Font = Enum.Font.GothamBold
+    text.TextStrokeTransparency = 0
 
-    SafeCall(function()
-        bgui.Parent = part
-    end)
+    bgui.Parent = part
     espObjects[part] = bgui
 end
 
 local function clearESP()
     for part, gui in pairs(espObjects) do
-        SafeCall(function()
-            if gui then gui:Destroy() end
-        end)
+        if gui then gui:Destroy() end
         espObjects[part] = nil
     end
     table.clear(espObjects)
 end
 
 local function getCharacter()
-    local char = SafeCall(function()
-        return player.Character
-    end)
-    local hrp = char and SafeCall(function()
-        return char:FindFirstChild("HumanoidRootPart")
-    end)
-    local hum = char and SafeCall(function()
-        return char:FindFirstChildOfClass("Humanoid")
-    end)
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
     return char, hrp, hum
 end
 
 local function zeroHrpVelocity(hrp)
     if not hrp then return end
-    SafeCall(function()
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-    end)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
 end
 
 local function cleanupFlight()
     if not flightState then return end
 
     if flightState.tween then
-        SafeCall(function()
-            flightState.tween:Cancel()
-        end)
+        flightState.tween:Cancel()
     end
     if flightState.heartbeatConn then
         flightState.heartbeatConn:Disconnect()
     end
     if flightState.cframeValue then
-        SafeCall(function()
-            flightState.cframeValue:Destroy()
-        end)
+        flightState.cframeValue:Destroy()
     end
 
     flightState = nil
@@ -361,9 +269,7 @@ local function stopFlight()
     cleanupFlight()
 
     if noclipConnection and not _G.StandaloneNoClip and not _G.ItemFarm then
-        SafeCall(function()
-            noclipConnection:Disconnect()
-        end)
+        noclipConnection:Disconnect()
         noclipConnection = nil
     end
 end
@@ -372,21 +278,12 @@ local function ensureNoClip()
     if noclipConnection then return end
     noclipConnection = RunService.Stepped:Connect(function()
         if not _G.ItemFarm and not _G.StandaloneNoClip then return end
-        local char = SafeCall(function()
-            return player.Character
-        end)
+        local char = player.Character
         if not char then return end
-        local hrp = SafeCall(function()
-            return char:FindFirstChild("HumanoidRootPart")
-        end)
-        local descendants = SafeCall(function()
-            return char:GetDescendants()
-        end)
-        if descendants then
-            for _, part in ipairs(descendants) do
-                if part:IsA("BasePart") and part ~= hrp then
-                    part.CanCollide = false
-                end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part ~= hrp then
+                part.CanCollide = false
             end
         end
     end)
@@ -482,21 +379,16 @@ local function moveToItemAndPickup(item)
     local currentHrp = char:FindFirstChild("HumanoidRootPart")
     if currentHrp then
         currentHrp.CFrame = targetCFrame
-        -- Strictly zero physics to prevent Error 267
-        SafeCall(function()
-            currentHrp.AssemblyLinearVelocity = Vector3.zero
-            currentHrp.AssemblyAngularVelocity = Vector3.zero
-        end)
+        currentHrp.AssemblyLinearVelocity = Vector3.zero
+        currentHrp.AssemblyAngularVelocity = Vector3.zero
     end
 
     task.wait(0.05)
 
     if shouldContinue() then
-        SafeCall(function()
-            item.prompt.RequiresLineOfSight = false
-            item.prompt.HoldDuration = 0
-            fireproximityprompt(item.prompt, 0)
-        end)
+        item.prompt.RequiresLineOfSight = false
+        item.prompt.HoldDuration = 0
+        fireproximityprompt(item.prompt, 0)
     end
 
     local pickedUp = not item.prompt:IsDescendantOf(workspace) or isInvalidItemPart(item.parent)
@@ -509,102 +401,37 @@ local function tryRespawn()
     if not _G.AutoRespawn then return end
     local _, _, hum = getCharacter()
     if hum and hum.Health <= 0 then
-        local replicatedStorage = SafeCall(function()
-            return game:GetService("ReplicatedStorage")
-        end)
-        if not replicatedStorage then return end
-        
-        local remotes = SafeCall(function()
-            return replicatedStorage:FindFirstChild("Remotes")
-        end)
-        if not remotes then return end
-        
-        local loadCharacter = SafeCall(function()
-            return remotes:FindFirstChild("LoadCharacter")
-        end)
-        if loadCharacter then
-            safeFireRemote(loadCharacter)
+        local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+        if remotes then
+            local loadCharacter = remotes:FindFirstChild("LoadCharacter")
+            if loadCharacter then
+                loadCharacter:FireServer()
+            end
         end
     end
 end
 
 -- ====================
--- UI
+-- REMOTE EVENT DEBOUNCE
 -- ====================
-local Window = Rayfield:CreateWindow({
-    Name = "UA Killer Hub | YBA",
-    LoadingTitle = "Завантаження...",
-    LoadingSubtitle = "by acount20061-lgtm | VIRTUAL CFRAME BYPASS",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "UAKillerHub",
-        FileName = "YBA_Config",
-    },
-})
+local lastRemoteFireTime = 0
+local REMOTE_DEBOUNCE_DELAY = 0.8
 
-local MainTab = Window:CreateTab("Головна", 4483362458)
-local FarmTab = Window:CreateTab("Автофарм", 4483362534)
-local ShopTab = Window:CreateTab("Магазин", 4483362458)
-local MiscTab = Window:CreateTab("Інше", 4483362458)
-
--- ====================
--- ГОЛОВНА
--- ====================
-MainTab:CreateSection("Налаштування конфігу")
-
-MainTab:CreateToggle({
-    Name = "Автозавантаження конфігу при старті",
-    CurrentValue = shouldAutoLoad,
-    Callback = function(value)
-        pcall(function()
-            if writefile then writefile(autoLoadFile, tostring(value)) end
-        end)
-    end,
-})
-
-MainTab:CreateButton({
-    Name = "Завантажити конфіг вручну",
-    Callback = function()
-        pcall(function() Rayfield:LoadConfiguration() end)
-    end,
-})
-
-MainTab:CreateSection("Характеристики")
-
-local JP_Value = 50
-local function applyJumpPower()
-    local _, _, hum = getCharacter()
-    if hum then 
-        SafeCall(function()
-            hum.JumpPower = JP_Value 
-        end)
+local function safeFireRemote(remote, ...)
+    local now = tick()
+    local timeSinceLastFire = now - lastRemoteFireTime
+    
+    if timeSinceLastFire < REMOTE_DEBOUNCE_DELAY then
+        local waitTime = REMOTE_DEBOUNCE_DELAY - timeSinceLastFire
+        task.wait(waitTime)
     end
+    
+    remote:FireServer(...)
+    lastRemoteFireTime = tick()
 end
 
-SafeCall(function()
-    player.CharacterAdded:Connect(function()
-       	task.wait(0.5)
-        applyJumpPower()
-    end)
-end)
-
-task.spawn(function()
-    while task.wait(0.15) do
-        applyJumpPower()
-    end
-end)
-
-MainTab:CreateSlider({
-    Name = "Висота стрибка (JumpPower)",
-    Range = { 50, 200 },
-    Increment = 1,
-    CurrentValue = 50,
-    Flag = "JumpPower_Slider",
-    Callback = function(value) JP_Value = value end,
-})
-
 -- ====================
--- МАГАЗИН
+-- SHOP FUNCTIONS
 -- ====================
 local sellQueue = {}
 local isSelling = false
@@ -617,20 +444,14 @@ local function processSellQueue()
         if not _G.AutoSell then break end
 
         local item = table.remove(sellQueue, 1)
-        local backpack = SafeCall(function()
-            return player:FindFirstChild("Backpack")
-        end)
+        local backpack = player:FindFirstChild("Backpack")
         
         if item and backpack and item.Parent == backpack and item:IsA("Tool") and item.Name ~= "Lucky Arrow" then
             local char, _, hum = getCharacter()
-            local remote = char and SafeCall(function()
-                return char:FindFirstChild("RemoteEvent")
-            end)
+            local remote = char and char:FindFirstChild("RemoteEvent")
             
             if remote and hum then
-                SafeCall(function()
-                    hum:EquipTool(item)
-                end)
+                hum:EquipTool(item)
                 task.wait(0.45)
                 
                 safeFireRemote(remote, "EndDialogue", {
@@ -654,210 +475,285 @@ local function queueItemForSale(item)
 end
 
 local function setupBackpackListener(backpack)
-    local children = SafeCall(function()
-        return backpack:GetChildren()
-    end)
-    if children then
-        for _, item in ipairs(children) do
-            queueItemForSale(item)
-        end
+    for _, item in ipairs(backpack:GetChildren()) do
+        queueItemForSale(item)
     end
-    
     backpack.ChildAdded:Connect(function(item)
         task.wait(0.35)
         queueItemForSale(item)
     end)
 end
 
-SafeCall(function()
-    player.ChildAdded:Connect(function(child)
-        if child.Name == "Backpack" then setupBackpackListener(child) end
+player.ChildAdded:Connect(function(child)
+    if child.Name == "Backpack" then setupBackpackListener(child) end
+end)
+if player:FindFirstChild("Backpack") then setupBackpackListener(player.Backpack) end
+
+-- ====================
+-- SIMPLE CUSTOM GUI
+-- ====================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "UAKillerHub_GUI"
+screenGui.Parent = player:PlayerGui
+screenGui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 350, 0, 450)
+mainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "TitleLabel"
+titleLabel.Size = UDim2.new(1, 0, 0, 40)
+titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+titleLabel.Text = "UA Killer Hub | YBA"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextSize = 18
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Parent = mainFrame
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Name = "StatusLabel"
+statusLabel.Size = UDim2.new(1, -20, 0, 25)
+statusLabel.Position = UDim2.new(0, 10, 0, 50)
+statusLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+statusLabel.Text = "Status: Waiting..."
+statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+statusLabel.TextSize = 14
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Parent = mainFrame
+
+local function createToggle(name, y, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, -20, 0, 35)
+    frame.Position = UDim2.new(0, 10, 0, y)
+    frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    frame.Parent = mainFrame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0.25, 0, 0, 25)
+    button.Position = UDim2.new(0.7, 5, 0, 5)
+    button.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    button.Text = "OFF"
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 12
+    button.Font = Enum.Font.GothamBold
+    button.Parent = frame
+
+    button.MouseButton1Click:Connect(function()
+        local currentState = button.Text == "ON"
+        local newState = not currentState
+        button.Text = newState and "ON" or "OFF"
+        button.BackgroundColor3 = newState and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(100, 100, 100)
+        callback(newState)
+    end)
+
+    return button
+end
+
+local function createSlider(name, y, min, max, current, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, -20, 0, 50)
+    frame.Position = UDim2.new(0, 10, 0, y)
+    frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    frame.Parent = mainFrame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name .. ": " .. current
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.Font = Enum.Font.Gotham
+    label.Parent = frame
+
+    local slider = Instance.new("TextButton")
+    slider.Size = UDim2.new(1, 0, 0, 25)
+    slider.Position = UDim2.new(0, 0, 0, 25)
+    slider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    slider.Text = ""
+    slider.Parent = frame
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((current - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    fill.Parent = slider
+
+    slider.MouseButton1Down:Connect(function()
+        local input = slider.MouseEnter:Wait()
+        while input.UserInputState == Enum.UserInputState.Begin do
+            local mousePos = input.MousePosition
+            local sliderPos = slider.AbsolutePosition
+            local sliderSize = slider.AbsoluteSize
+            local percent = math.clamp((mousePos.X - sliderPos.X) / sliderSize.X, 0, 1)
+            local value = math.floor(min + percent * (max - min))
+            
+            fill.Size = UDim2.new(percent, 0, 1, 0)
+            label.Text = name .. ": " .. value
+            callback(value)
+            
+            input = slider.MouseEnter:Wait()
+        end
+    end)
+
+    return slider
+end
+
+-- Create toggles
+local yOffset = 85
+local itemFarmToggle = createToggle("Auto Farm", yOffset, function(value)
+    _G.ItemFarm = value
+    if not value then
+        farmThreadActive = false
+        setFarmStatus("Stopped")
+        stopFlight()
+        return
+    end
+
+    if farmThreadActive then return end
+    farmThreadActive = true
+
+    task.spawn(function()
+        setFarmStatus("Searching items...")
+        while _G.ItemFarm and farmThreadActive do
+            tryRespawn()
+
+            local _, hrp = getCharacter()
+            if not hrp then
+                setFarmStatus("Waiting for character...")
+                task.wait(0.5)
+                continue
+            end
+
+            local targetItem = getNearestItem(hrp)
+            if not targetItem then
+                setFarmStatus("No items found")
+                task.wait(0.35)
+                continue
+            end
+
+            setFarmStatus("Flying to: " .. targetItem.name)
+            if moveToItemAndPickup(targetItem) then
+                banCoordinate(targetItem.position)
+                if espObjects[targetItem.part] then
+                    espObjects[targetItem.part]:Destroy()
+                    espObjects[targetItem.part] = nil
+                end
+                lastCacheRefresh = 0
+            end
+
+            task.wait(0.08)
+        end
+
+        farmThreadActive = false
+        setFarmStatus("Stopped")
+        stopFlight()
     end)
 end)
 
-SafeCall(function()
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then setupBackpackListener(backpack) end
+yOffset = yOffset + 45
+createToggle("ESP", yOffset, function(value)
+    _G.ItemESP = value
 end)
 
-ShopTab:CreateToggle({
-    Name = "Автопродаж (крім Lucky Arrow)",
-    CurrentValue = false,
-    Flag = "AutoSell_Toggle",
-    Callback = function(value)
-        _G.AutoSell = value
-        if value then
-            local backpack = player:FindFirstChild("Backpack")
-            if backpack then
-                for _, item in ipairs(backpack:GetChildren()) do
-                    queueItemForSale(item)
-                end
+yOffset = yOffset + 45
+createToggle("Auto Sell", yOffset, function(value)
+    _G.AutoSell = value
+    if value then
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                queueItemForSale(item)
             end
-        else
-            table.clear(sellQueue)
         end
-    end,
-})
+    else
+        table.clear(sellQueue)
+    end
+end)
 
-ShopTab:CreateToggle({
-    Name = "Автокупівля (Lucky Arrow)",
-    CurrentValue = false,
-    Flag = "AutoBuy_Toggle",
-    Callback = function(value)
-        _G.AutoBuy = value
-        if value then
-            task.spawn(function()
-                while _G.AutoBuy do
-                    local char = SafeCall(function()
-                        return player.Character
-                    end)
-                    local remote = char and SafeCall(function()
-                        return char:FindFirstChild("RemoteEvent")
-                    end)
-                    if remote then
-                        safeFireRemote(remote, "PurchaseShopItem", { ItemName = "1x Lucky Arrow" })
-                    end
-                    task.wait(2.5 + math.random() * 1.5)
+yOffset = yOffset + 45
+createToggle("Auto Buy (Lucky Arrow)", yOffset, function(value)
+    _G.AutoBuy = value
+    if value then
+        task.spawn(function()
+            while _G.AutoBuy do
+                local char = player.Character
+                local remote = char and char:FindFirstChild("RemoteEvent")
+                if remote then
+                    safeFireRemote(remote, "PurchaseShopItem", { ItemName = "1x Lucky Arrow" })
                 end
-            end)
-        end
-    end,
-})
-
--- ====================
--- АВТОФАРМ
--- ====================
-local statusLabel = FarmTab:CreateLabel("Статус: Очікування...")
-
-task.spawn(function()
-    while task.wait(0.35) do
-        pcall(function()
-            statusLabel:Set("Статус: " .. farmStatusText)
+                task.wait(2.5 + math.random() * 1.5)
+            end
         end)
     end
 end)
 
-FarmTab:CreateSlider({
-    Name = "Швидкість польоту",
-    Range = { 50, 350 },
-    Increment = 5,
-    CurrentValue = 150,
-    Flag = "FlySpeed_Slider",
-    Callback = function(value) _G.FlySpeed = value end,
-})
-
-FarmTab:CreateSlider({
-    Name = "Дистанція підбору",
-    Range = { 2, 8 },
-    Increment = 0.5,
-    CurrentValue = 3.5,
-    Flag = "PickupDistance_Slider",
-    Callback = function(value) _G.PickupDistance = value end,
-})
-
-FarmTab:CreateToggle({
-    Name = "Увімкнути ESP",
-    CurrentValue = false,
-    Flag = "ESP_Toggle",
-    Callback = function(value) _G.ItemESP = value end,
-})
-
-FarmTab:CreateToggle({
-    Name = "Увімкнути автофарм",
-    CurrentValue = false,
-    Flag = "ItemFarmToggle",
-    Callback = function(value)
-        _G.ItemFarm = value
-        if not value then
-            farmThreadActive = false
-            setFarmStatus("Зупинено")
-            stopFlight()
-            return
-        end
-
-        if farmThreadActive then return end
-        farmThreadActive = true
-
-        task.spawn(function()
-            setFarmStatus("Пошук предметів...")
-            while _G.ItemFarm and farmThreadActive do
-                tryRespawn()
-
-                local _, hrp = getCharacter()
-                if not hrp then
-                    setFarmStatus("Очікування персонажа...")
-                    task.wait(0.5)
-                    continue
-                end
-
-                local targetItem = getNearestItem(hrp)
-                if not targetItem then
-                    setFarmStatus("Предметів не знайдено")
-                    task.wait(0.35)
-                    continue
-                end
-
-                setFarmStatus("Лечу до: " .. targetItem.name)
-                if moveToItemAndPickup(targetItem) then
-                    banCoordinate(targetItem.position)
-                    if espObjects[targetItem.part] then
-                        espObjects[targetItem.part]:Destroy()
-                        espObjects[targetItem.part] = nil
-                    end
-                    lastCacheRefresh = 0
-                end
-
-                task.wait(0.08)
-            end
-
-            farmThreadActive = false
-            setFarmStatus("Зупинено")
-            stopFlight()
+yOffset = yOffset + 45
+createToggle("Anti-AFK", yOffset, function(value)
+    _G.AntiAFK = value
+    if antiAfkConnection then
+        antiAfkConnection:Disconnect()
+        antiAfkConnection = nil
+    end
+    if value then
+        antiAfkConnection = player.Idled:Connect(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
         end)
-    end,
-})
+    end
+end)
 
-FarmTab:CreateSection("Фільтр предметів")
+yOffset = yOffset + 45
+createToggle("NoClip", yOffset, function(value)
+    _G.StandaloneNoClip = value
+    if value then
+        ensureNoClip()
+    elseif not _G.ItemFarm and noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+end)
 
-FarmTab:CreateButton({
-    Name = "Увімкнути всі предмети",
-    Callback = function()
-        for name in pairs(_G.SelectedItems) do
-            _G.SelectedItems[name] = true
-        end
-        lastCacheRefresh = 0
-    end,
-})
+yOffset = yOffset + 45
+createToggle("Auto Respawn", yOffset, function(value)
+    _G.AutoRespawn = value
+end)
 
-FarmTab:CreateButton({
-    Name = "Вимкнути всі предмети",
-    Callback = function()
-        for name in pairs(_G.SelectedItems) do
-            _G.SelectedItems[name] = false
-        end
-        lastCacheRefresh = 0
-    end,
-})
+-- Create sliders
+yOffset = yOffset + 50
+createSlider("Fly Speed", yOffset, 50, 350, 150, function(value)
+    _G.FlySpeed = value
+end)
 
-local sortedItems = {}
-for name in pairs(_G.SelectedItems) do
-    table.insert(sortedItems, name)
-end
-table.sort(sortedItems)
+yOffset = yOffset + 55
+createSlider("Pickup Distance", yOffset, 2, 8, 3.5, function(value)
+    _G.PickupDistance = value
+end)
 
-for _, itemName in ipairs(sortedItems) do
-    FarmTab:CreateToggle({
-        Name = itemName,
-        CurrentValue = false,
-        Flag = "Filter_" .. itemName,
-        Callback = function(value)
-            _G.SelectedItems[itemName] = value
-            lastCacheRefresh = 0
-        end,
-    })
-end
+-- Status update loop
+task.spawn(function()
+    while task.wait(0.35) do
+        statusLabel.Text = "Status: " .. farmStatusText
+    end
+end)
 
--- ESP цикл (використовує кеш)
+-- ESP loop
 task.spawn(function()
     while true do
         task.wait(0.8)
@@ -871,86 +767,4 @@ task.spawn(function()
     end
 end)
 
--- ====================
--- ІНШЕ
--- ====================
-MiscTab:CreateToggle({
-    Name = "Anti-AFK",
-    CurrentValue = false,
-    Flag = "AntiAFK_Toggle",
-    Callback = function(value)
-        _G.AntiAFK = value
-        if antiAfkConnection then
-            SafeCall(function()
-                antiAfkConnection:Disconnect()
-            end)
-            antiAfkConnection = nil
-        end
-        if value then
-            antiAfkConnection = SafeCall(function()
-                return player.Idled:Connect(function()
-                    SafeCall(function()
-                        VirtualUser:CaptureController()
-                    end)
-                    SafeCall(function()
-                        VirtualUser:ClickButton2(Vector2.new())
-                    end)
-                end)
-            end)
-        end
-    end,
-})
-
-MiscTab:CreateToggle({
-    Name = "NoClip (окремо від фарму)",
-    CurrentValue = false,
-    Flag = "StandaloneNoClip_Toggle",
-    Callback = function(value)
-        _G.StandaloneNoClip = value
-        if value then
-            ensureNoClip()
-        elseif not _G.ItemFarm and noclipConnection then
-            noclipConnection:Disconnect()
-            noclipConnection = nil
-        end
-    end,
-})
-
-MiscTab:CreateToggle({
-    Name = "Авто-респawn при смерті",
-    CurrentValue = true,
-    Flag = "AutoRespawn_Toggle",
-    Callback = function(value)
-        _G.AutoRespawn = value
-    end,
-})
-
-MiscTab:CreateButton({
-    Name = "Очистити заблоковані координати",
-    Callback = function()
-        table.clear(bannedCoordinates)
-        lastCacheRefresh = 0
-        Rayfield:Notify({
-            Title = "UA Killer Hub",
-            Content = "Чорний список координат очищено",
-            Duration = 3,
-        })
-    end,
-})
-
-if shouldAutoLoad then
-    pcall(function()
-        local configPath = "UAKillerHub/YBA_Config.json"
-        if (isfile and isfile(configPath)) or not isfile then
-            Rayfield:LoadConfiguration()
-        elseif writefile then
-            writefile(autoLoadFile, "false")
-        end
-    end)
-end
-
-Rayfield:Notify({
-    Title = "UA Killer Hub",
-    Content = "Завантажено. Virtual CFrame bypass активний.",
-    Duration = 4,
-})
+print("UA Killer Hub | YBA - Loaded Successfully")
