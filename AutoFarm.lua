@@ -400,16 +400,21 @@ local function moveToItemAndPickup(item)
 
     local currentHrp = char:FindFirstChild("HumanoidRootPart")
     if currentHrp then
+        currentHrp.Anchored = true
         currentHrp.CFrame = targetCFrame
         zeroHrpVelocity(currentHrp)
     end
 
-    task.wait(0.03)
+    task.wait(0.35)
 
-    if shouldContinue() then
+    if shouldContinue() and currentHrp and currentHrp.Parent then
         item.prompt.RequiresLineOfSight = false
         item.prompt.HoldDuration = 0
         fireproximityprompt(item.prompt, 0)
+        task.wait(0.15)
+        currentHrp.Anchored = false
+    elseif currentHrp and currentHrp.Parent then
+        currentHrp.Anchored = false
     end
 
     local pickedUp = not item.prompt:IsDescendantOf(workspace) or isInvalidItemPart(item.parent)
