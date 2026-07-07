@@ -2,11 +2,46 @@
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
+
+local function findPressedPlayRemote()
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if remotes then
+        local remote = remotes:FindFirstChild("RemoteEvent") or remotes:FindFirstChildOfClass("RemoteEvent")
+        if remote then return remote end
+    end
+    return ReplicatedStorage:FindFirstChild("RemoteEvent", true)
+end
+
+local function skipStartMenu()
+    pcall(function()
+        VirtualInputManager:SendMouseButtonEvent(132, 265, 0, true, game, 0)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(132, 265, 0, false, game, 0)
+    end)
+
+    pcall(function()
+        local remote = findPressedPlayRemote()
+        if remote then
+            remote:FireServer("PressedPlay")
+        end
+    end)
+end
+
+skipStartMenu()
+
+if not player.Character then
+    player.CharacterAdded:Wait()
+end
+
+repeat task.wait() until player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
 local autoLoadFile = "YBA_AutoLoad.txt"
 local shouldAutoLoad = false
 
@@ -40,7 +75,6 @@ _G.FlySpeed = 150
 _G.PickupDistance = 3.5
 _G.AntiAFK = false
 _G.StandaloneNoClip = false
-_G.AutoRespawn = true
 
 _G.SelectedItems = {
     ["Ancient Scroll"] = false,
@@ -423,14 +457,15 @@ local function moveToItemAndPickup(item)
     return pickedUp
 end
 
-local function tryRespawn()
-    if not _G.AutoRespawn then return end
-    local _, _, hum = getCharacter()
-    if hum and hum.Health <= 0 then
-        pcall(function()
-            local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-            remote = remote and remote:FindFirstChild("LoadCharacter")
-            if remote then remote:FireServer() end
+local function setAntiAfkEnabled(enabled)
+    _G.AntiAFK = enabled
+    if antiAfkConnection then
+        antiAfkConnection:Disconnect()
+        antiAfkConnection = nil
+    end
+    if enabled then
+        antiAfkConnection = player.Idled:Connect(function()
+            game:GetService("VirtualUser"):ClickButton2(Vector2.new())
         end)
     end
 end
@@ -474,34 +509,6 @@ MainTab:CreateButton({
     Callback = function()
         pcall(function() Rayfield:LoadConfiguration() end)
     end,
-})
-
-MainTab:CreateSection("Характеристики")
-
-local JP_Value = 50
-local function applyJumpPower()
-    local _, _, hum = getCharacter()
-    if hum then hum.JumpPower = JP_Value end
-end
-
-player.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    applyJumpPower()
-end)
-
-task.spawn(function()
-    while task.wait(0.15) do
-        applyJumpPower()
-    end
-end)
-
-MainTab:CreateSlider({
-    Name = "Висота стрибка (JumpPower)",
-    Range = { 50, 200 },
-    Increment = 1,
-    CurrentValue = 50,
-    Flag = "JumpPower_Slider",
-    Callback = function(value) JP_Value = value end,
 })
 
 -- ====================
@@ -657,8 +664,6 @@ FarmTab:CreateToggle({
         task.spawn(function()
             setFarmStatus("Пошук предметів...")
             while _G.ItemFarm and farmThreadActive do
-                tryRespawn()
-
                 local _, hrp = getCharacter()
                 if not hrp then
                     setFarmStatus("Очікування персонажа...")
@@ -755,17 +760,7 @@ MiscTab:CreateToggle({
     CurrentValue = false,
     Flag = "AntiAFK_Toggle",
     Callback = function(value)
-        _G.AntiAFK = value
-        if antiAfkConnection then
-            antiAfkConnection:Disconnect()
-            antiAfkConnection = nil
-        end
-        if value then
-            antiAfkConnection = player.Idled:Connect(function()
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new())
-            end)
-        end
+        setAntiAfkEnabled(value)
     end,
 })
 
@@ -781,15 +776,6 @@ MiscTab:CreateToggle({
             noclipConnection:Disconnect()
             noclipConnection = nil
         end
-    end,
-})
-
-MiscTab:CreateToggle({
-    Name = "Авто-респawn при смерті",
-    CurrentValue = true,
-    Flag = "AutoRespawn_Toggle",
-    Callback = function(value)
-        _G.AutoRespawn = value
     end,
 })
 
