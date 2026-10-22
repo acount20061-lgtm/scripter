@@ -60,14 +60,14 @@ end)
 -- ====================
 -- ГЛОБАЛЬНІ НАЛАШТУВАННЯ
 -- ====================
-_G.AutoSell = true
-_G.AutoEventCandy = true
-_G.AutoBuy = true
-_G.ItemFarm = true
+_G.AutoSell = false
+_G.AutoEventCandy = false
+_G.AutoBuy = false
+_G.ItemFarm = false
 _G.ItemESP = false
 _G.FlySpeed = 80
 _G.PickupDistance = 3.5
-_G.AntiAFK = true
+_G.AntiAFK = false
 _G.StandaloneNoClip = false
 _G.AutoRespawn = true
 
