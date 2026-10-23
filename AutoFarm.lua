@@ -860,10 +860,56 @@ task.spawn(function()
 end)
 
 -- =======================================================
--- БЕЗПЕЧНЕ СТВОРЕННЯ MONHUB GUI
+-- ОПТИМІЗОВАНЕ СТВОРЕННЯ MONHUB GUI
 -- =======================================================
 print("[UA Killer Hub | GUI] Початок створення графічного інтерфейсу...")
 
+-- ── Кольори теми ─────────────────────────────────────────
+local C = {
+    bg       = Color3.fromRGB(23, 25, 31),
+    bgDark   = Color3.fromRGB(19, 21, 26),
+    card     = Color3.fromRGB(28, 31, 39),
+    cardHov  = Color3.fromRGB(36, 40, 52),
+    accent   = Color3.fromRGB(139, 124, 246),
+    text     = Color3.fromRGB(240, 242, 245),
+    textSub  = Color3.fromRGB(230, 233, 240),
+    textDim  = Color3.fromRGB(150, 155, 165),
+    stroke   = Color3.fromRGB(38, 42, 53),
+    sidebar  = Color3.fromRGB(18, 20, 25),
+    tabBg    = Color3.fromRGB(23, 25, 32),
+    switchOff= Color3.fromRGB(42, 46, 58),
+    line     = Color3.fromRGB(34, 38, 48),
+    btnBg    = Color3.fromRGB(28, 31, 40),
+    btnText  = Color3.fromRGB(160, 165, 175),
+    statusBg = Color3.fromRGB(24, 27, 34),
+    statusSt = Color3.fromRGB(42, 46, 58),
+    toastBg  = Color3.fromRGB(27, 30, 38),
+    toastMsg = Color3.fromRGB(200, 205, 215),
+    searchBg = Color3.fromRGB(28, 31, 39),
+    searchPh = Color3.fromRGB(110, 115, 130),
+    searchIc = Color3.fromRGB(150, 155, 165),
+    white    = Color3.fromRGB(255, 255, 255),
+}
+
+-- ── Хелпер: створення Instance з пропсами ────────────────
+local function new(className, parent, props)
+    local inst = Instance.new(className)
+    if props then
+        for k, v in pairs(props) do inst[k] = v end
+    end
+    inst.Parent = parent
+    return inst
+end
+
+local function corner(parent, radius)
+    return new("UICorner", parent, { CornerRadius = UDim.new(0, radius or 6) })
+end
+
+local function stroke(parent, color, thickness, transparency)
+    return new("UIStroke", parent, { Color = color or C.stroke, Thickness = thickness or 1, Transparency = transparency or 0 })
+end
+
+-- ── Безпечний батьківський контейнер GUI ─────────────────
 local function getSafeGuiParent()
     if gethui then
         local ok, h = pcall(gethui)
@@ -895,164 +941,111 @@ pcall(function()
     end
 end)
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name           = "UAKillerHub_GUI"
-ScreenGui.ResetOnSpawn   = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent         = targetGuiParent
+-- ── ScreenGui та MainFrame ───────────────────────────────
+local ScreenGui = new("ScreenGui", targetGuiParent, {
+    Name = "UAKillerHub_GUI", ResetOnSpawn = false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+})
 
-local MainFrame = Instance.new("Frame")
-MainFrame.Name             = "MainFrame"
-MainFrame.Size             = UDim2.new(0, 520, 0, 400)
-MainFrame.Position         = UDim2.new(0.5, -260, 0.5, -200)
-MainFrame.BackgroundColor3 = Color3.fromRGB(23, 25, 31)
-MainFrame.BorderSizePixel  = 0
-MainFrame.ClipsDescendants = true
-MainFrame.Parent           = ScreenGui
+local MainFrame = new("Frame", ScreenGui, {
+    Name = "MainFrame", Size = UDim2.new(0, 520, 0, 400),
+    Position = UDim2.new(0.5, -260, 0.5, -200),
+    BackgroundColor3 = C.bg, BorderSizePixel = 0, ClipsDescendants = true,
+})
+corner(MainFrame, 10)
+stroke(MainFrame, C.stroke)
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 10)
-MainCorner.Parent       = MainFrame
-
-local MainStroke = Instance.new("UIStroke")
-MainStroke.Color     = Color3.fromRGB(38, 42, 53)
-MainStroke.Thickness = 1
-MainStroke.Parent    = MainFrame
-
--- Контейнер сповіщень
-local ToastContainer = Instance.new("Frame")
-ToastContainer.Name                  = "ToastContainer"
-ToastContainer.Size                  = UDim2.new(0, 240, 1, -20)
-ToastContainer.Position              = UDim2.new(1, -250, 0, 10)
-ToastContainer.BackgroundTransparency = 1
-ToastContainer.Parent                = ScreenGui
-
-local ToastList = Instance.new("UIListLayout")
-ToastList.Padding             = UDim.new(0, 6)
-ToastList.SortOrder           = Enum.SortOrder.LayoutOrder
-ToastList.VerticalAlignment   = Enum.VerticalAlignment.Bottom
-ToastList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-ToastList.Parent              = ToastContainer
+-- ── Сповіщення ───────────────────────────────────────────
+local ToastContainer = new("Frame", ScreenGui, {
+    Name = "ToastContainer", Size = UDim2.new(0, 240, 1, -20),
+    Position = UDim2.new(1, -250, 0, 10), BackgroundTransparency = 1,
+})
+new("UIListLayout", ToastContainer, {
+    Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder,
+    VerticalAlignment = Enum.VerticalAlignment.Bottom,
+    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+})
 
 local function showNotification(title, message, duration)
     duration = duration or 3
-    local toast = Instance.new("Frame")
-    toast.Size             = UDim2.new(1, 0, 0, 0)
-    toast.BackgroundColor3 = Color3.fromRGB(27, 30, 38)
-    toast.BorderSizePixel  = 0
-    toast.ClipsDescendants = true
-    toast.Parent           = ToastContainer
+    local toast = new("Frame", ToastContainer, {
+        Size = UDim2.new(1, 0, 0, 0), BackgroundColor3 = C.toastBg,
+        BorderSizePixel = 0, ClipsDescendants = true,
+    })
+    corner(toast, 8)
+    local tStroke = stroke(toast, C.accent, 1, 1)
 
-    Instance.new("UICorner", toast).CornerRadius = UDim.new(0, 8)
+    local titleLbl = new("TextLabel", toast, {
+        Size = UDim2.new(1, -16, 0, 20), Position = UDim2.new(0, 10, 0, 6),
+        BackgroundTransparency = 1, Text = title, TextColor3 = C.accent,
+        Font = Enum.Font.GothamBold, TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
+    })
+    local msgLbl = new("TextLabel", toast, {
+        Size = UDim2.new(1, -16, 0, 22), Position = UDim2.new(0, 10, 0, 26),
+        BackgroundTransparency = 1, Text = message, TextColor3 = C.toastMsg,
+        Font = Enum.Font.Gotham, TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 1,
+    })
 
-    local stroke = Instance.new("UIStroke", toast)
-    stroke.Color       = Color3.fromRGB(139, 124, 246)
-    stroke.Thickness   = 1
-    stroke.Transparency = 1
-
-    local titleLbl = Instance.new("TextLabel", toast)
-    titleLbl.Size                  = UDim2.new(1, -16, 0, 20)
-    titleLbl.Position              = UDim2.new(0, 10, 0, 6)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Text                  = title
-    titleLbl.TextColor3            = Color3.fromRGB(139, 124, 246)
-    titleLbl.Font                  = Enum.Font.GothamBold
-    titleLbl.TextSize              = 13
-    titleLbl.TextXAlignment        = Enum.TextXAlignment.Left
-    titleLbl.TextTransparency      = 1
-
-    local msgLbl = Instance.new("TextLabel", toast)
-    msgLbl.Size                  = UDim2.new(1, -16, 0, 22)
-    msgLbl.Position              = UDim2.new(0, 10, 0, 26)
-    msgLbl.BackgroundTransparency = 1
-    msgLbl.Text                  = message
-    msgLbl.TextColor3            = Color3.fromRGB(200, 205, 215)
-    msgLbl.Font                  = Enum.Font.Gotham
-    msgLbl.TextSize              = 11
-    msgLbl.TextXAlignment        = Enum.TextXAlignment.Left
-    msgLbl.TextTransparency      = 1
-
-    TweenService:Create(toast,    TweenInfo.new(0.2), { Size = UDim2.new(1, 0, 0, 55) }):Play()
-    TweenService:Create(stroke,   TweenInfo.new(0.2), { Transparency = 0 }):Play()
-    TweenService:Create(titleLbl, TweenInfo.new(0.2), { TextTransparency = 0 }):Play()
-    TweenService:Create(msgLbl,   TweenInfo.new(0.2), { TextTransparency = 0 }):Play()
+    local tw = TweenInfo.new(0.2)
+    TweenService:Create(toast,    tw, { Size = UDim2.new(1, 0, 0, 55) }):Play()
+    TweenService:Create(tStroke,  tw, { Transparency = 0 }):Play()
+    TweenService:Create(titleLbl, tw, { TextTransparency = 0 }):Play()
+    TweenService:Create(msgLbl,   tw, { TextTransparency = 0 }):Play()
 
     task.delay(duration, function()
         pcall(function()
-            TweenService:Create(toast,    TweenInfo.new(0.2), { Size = UDim2.new(1, 0, 0, 0) }):Play()
-            TweenService:Create(stroke,   TweenInfo.new(0.2), { Transparency = 1 }):Play()
-            TweenService:Create(titleLbl, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
-            local tw = TweenService:Create(msgLbl, TweenInfo.new(0.2), { TextTransparency = 1 })
-            tw:Play()
-            tw.Completed:Wait()
-            toast:Destroy()
+            TweenService:Create(toast,    tw, { Size = UDim2.new(1, 0, 0, 0) }):Play()
+            TweenService:Create(tStroke,  tw, { Transparency = 1 }):Play()
+            TweenService:Create(titleLbl, tw, { TextTransparency = 1 }):Play()
+            local last = TweenService:Create(msgLbl, tw, { TextTransparency = 1 })
+            last:Play(); last.Completed:Wait(); toast:Destroy()
         end)
     end)
 end
 
--- Верхня панель
-local TitleBar = Instance.new("Frame")
-TitleBar.Name             = "TitleBar"
-TitleBar.Size             = UDim2.new(1, 0, 0, 42)
-TitleBar.BackgroundColor3 = Color3.fromRGB(19, 21, 26)
-TitleBar.BorderSizePixel  = 0
-TitleBar.Parent           = MainFrame
+-- ── Верхня панель (Title Bar) ────────────────────────────
+local TitleBar = new("Frame", MainFrame, {
+    Name = "TitleBar", Size = UDim2.new(1, 0, 0, 42),
+    BackgroundColor3 = C.bgDark, BorderSizePixel = 0,
+})
+corner(TitleBar, 10)
+new("Frame", TitleBar, {
+    Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1),
+    BackgroundColor3 = C.line, BorderSizePixel = 0,
+})
+new("TextLabel", TitleBar, {
+    Size = UDim2.new(0, 140, 1, 0), Position = UDim2.new(0, 14, 0, 0),
+    BackgroundTransparency = 1, Text = "UA Killer Hub",
+    Font = Enum.Font.GothamBold, TextSize = 14,
+    TextColor3 = C.text, TextXAlignment = Enum.TextXAlignment.Left,
+})
+local Badge = new("TextLabel", TitleBar, {
+    Size = UDim2.new(0, 36, 0, 18), Position = UDim2.new(0, 126, 0.5, -9),
+    BackgroundColor3 = C.accent, Text = "YBA",
+    Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = C.white,
+})
+corner(Badge, 4)
 
-Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
+local function titleButton(text, xOffset)
+    local btn = new("TextButton", TitleBar, {
+        Size = UDim2.new(0, 26, 0, 26), Position = UDim2.new(1, xOffset, 0.5, -13),
+        BackgroundColor3 = C.btnBg, Text = text,
+        Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = C.btnText,
+    })
+    corner(btn, 6)
+    return btn
+end
 
-local TitleLine = Instance.new("Frame", TitleBar)
-TitleLine.Size             = UDim2.new(1, 0, 0, 1)
-TitleLine.Position         = UDim2.new(0, 0, 1, -1)
-TitleLine.BackgroundColor3 = Color3.fromRGB(34, 38, 48)
-TitleLine.BorderSizePixel  = 0
-
-local TitleText = Instance.new("TextLabel", TitleBar)
-TitleText.Size             = UDim2.new(0, 140, 1, 0)
-TitleText.Position         = UDim2.new(0, 14, 0, 0)
-TitleText.BackgroundTransparency = 1
-TitleText.Text             = "UA Killer Hub"
-TitleText.Font             = Enum.Font.GothamBold
-TitleText.TextSize         = 14
-TitleText.TextColor3       = Color3.fromRGB(240, 242, 245)
-TitleText.TextXAlignment   = Enum.TextXAlignment.Left
-
-local Badge = Instance.new("TextLabel", TitleBar)
-Badge.Size             = UDim2.new(0, 36, 0, 18)
-Badge.Position         = UDim2.new(0, 126, 0.5, -9)
-Badge.BackgroundColor3 = Color3.fromRGB(139, 124, 246)
-Badge.Text             = "YBA"
-Badge.Font             = Enum.Font.GothamBold
-Badge.TextSize         = 10
-Badge.TextColor3       = Color3.fromRGB(255, 255, 255)
-Instance.new("UICorner", Badge).CornerRadius = UDim.new(0, 4)
-
-local CloseBtn = Instance.new("TextButton", TitleBar)
-CloseBtn.Size             = UDim2.new(0, 26, 0, 26)
-CloseBtn.Position         = UDim2.new(1, -34, 0.5, -13)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(28, 31, 40)
-CloseBtn.Text             = "✕"
-CloseBtn.Font             = Enum.Font.GothamBold
-CloseBtn.TextSize         = 12
-CloseBtn.TextColor3       = Color3.fromRGB(160, 165, 175)
-Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
-
-local MinBtn = Instance.new("TextButton", TitleBar)
-MinBtn.Size             = UDim2.new(0, 26, 0, 26)
-MinBtn.Position         = UDim2.new(1, -66, 0.5, -13)
-MinBtn.BackgroundColor3 = Color3.fromRGB(28, 31, 40)
-MinBtn.Text             = "—"
-MinBtn.Font             = Enum.Font.GothamBold
-MinBtn.TextSize         = 12
-MinBtn.TextColor3       = Color3.fromRGB(160, 165, 175)
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
+local CloseBtn = titleButton("✕", -34)
+local MinBtn   = titleButton("—", -66)
 
 -- Перетягування
 local dragging, dragInput, dragStart, startPos
 TitleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging  = true
-        dragStart = input.Position
-        startPos  = MainFrame.Position
+        dragging = true; dragStart = input.Position; startPos = MainFrame.Position
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then dragging = false end
         end)
@@ -1073,8 +1066,9 @@ end)
 local isMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
-    local targetSize = isMinimized and UDim2.new(0, 520, 0, 42) or UDim2.new(0, 520, 0, 400)
-    TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad), { Size = targetSize }):Play()
+    TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+        Size = isMinimized and UDim2.new(0, 520, 0, 42) or UDim2.new(0, 520, 0, 400)
+    }):Play()
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
@@ -1088,61 +1082,46 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
--- Сайдбар
-local Sidebar = Instance.new("Frame", MainFrame)
-Sidebar.Name             = "Sidebar"
-Sidebar.Size             = UDim2.new(0, 130, 1, -42)
-Sidebar.Position         = UDim2.new(0, 0, 0, 42)
-Sidebar.BackgroundColor3 = Color3.fromRGB(18, 20, 25)
-Sidebar.BorderSizePixel  = 0
+-- ── Sidebar ──────────────────────────────────────────────
+local Sidebar = new("Frame", MainFrame, {
+    Name = "Sidebar", Size = UDim2.new(0, 130, 1, -42),
+    Position = UDim2.new(0, 0, 0, 42),
+    BackgroundColor3 = C.sidebar, BorderSizePixel = 0,
+})
+new("UIListLayout", Sidebar, {
+    Padding = UDim.new(0, 6),
+    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+})
+new("UIPadding", Sidebar, {
+    PaddingTop = UDim.new(0, 12), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6),
+})
 
-local SidebarList = Instance.new("UIListLayout", Sidebar)
-SidebarList.Padding             = UDim.new(0, 6)
-SidebarList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-SidebarList.SortOrder           = Enum.SortOrder.LayoutOrder
+-- ── Контентна панель ─────────────────────────────────────
+local ContentArea = new("Frame", MainFrame, {
+    Name = "ContentArea", Size = UDim2.new(1, -130, 1, -42),
+    Position = UDim2.new(0, 130, 0, 42), BackgroundTransparency = 1,
+})
 
-local SidebarPad = Instance.new("UIPadding", Sidebar)
-SidebarPad.PaddingTop   = UDim.new(0, 12)
-SidebarPad.PaddingLeft  = UDim.new(0, 6)
-SidebarPad.PaddingRight = UDim.new(0, 6)
+local SearchFrame = new("Frame", ContentArea, {
+    Name = "SearchFrame", Size = UDim2.new(1, -24, 0, 32),
+    Position = UDim2.new(0, 12, 0, 10),
+    BackgroundColor3 = C.searchBg, BorderSizePixel = 0,
+})
+corner(SearchFrame, 6)
+new("TextLabel", SearchFrame, {
+    Size = UDim2.new(0, 24, 1, 0), BackgroundTransparency = 1,
+    Text = "🔍", Font = Enum.Font.Gotham, TextSize = 11, TextColor3 = C.searchIc,
+})
+local SearchBox = new("TextBox", SearchFrame, {
+    Size = UDim2.new(1, -30, 1, 0), Position = UDim2.new(0, 28, 0, 0),
+    BackgroundTransparency = 1, PlaceholderText = "Пошук функцій...",
+    PlaceholderColor3 = C.searchPh, TextColor3 = C.text,
+    Font = Enum.Font.Gotham, TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false,
+})
 
--- Контентна панель
-local ContentArea = Instance.new("Frame", MainFrame)
-ContentArea.Name                  = "ContentArea"
-ContentArea.Size                  = UDim2.new(1, -130, 1, -42)
-ContentArea.Position              = UDim2.new(0, 130, 0, 42)
-ContentArea.BackgroundTransparency = 1
-
-local SearchFrame = Instance.new("Frame", ContentArea)
-SearchFrame.Name             = "SearchFrame"
-SearchFrame.Size             = UDim2.new(1, -24, 0, 32)
-SearchFrame.Position         = UDim2.new(0, 12, 0, 10)
-SearchFrame.BackgroundColor3 = Color3.fromRGB(28, 31, 39)
-SearchFrame.BorderSizePixel  = 0
-Instance.new("UICorner", SearchFrame).CornerRadius = UDim.new(0, 6)
-
-local SearchIcon = Instance.new("TextLabel", SearchFrame)
-SearchIcon.Size                  = UDim2.new(0, 24, 1, 0)
-SearchIcon.BackgroundTransparency = 1
-SearchIcon.Text                  = "🔍"
-SearchIcon.Font                  = Enum.Font.Gotham
-SearchIcon.TextSize              = 11
-SearchIcon.TextColor3            = Color3.fromRGB(150, 155, 165)
-
-local SearchBox = Instance.new("TextBox", SearchFrame)
-SearchBox.Size                  = UDim2.new(1, -30, 1, 0)
-SearchBox.Position              = UDim2.new(0, 28, 0, 0)
-SearchBox.BackgroundTransparency = 1
-SearchBox.PlaceholderText       = "Пошук функцій..."
-SearchBox.PlaceholderColor3     = Color3.fromRGB(110, 115, 130)
-SearchBox.TextColor3            = Color3.fromRGB(240, 242, 245)
-SearchBox.Font                  = Enum.Font.Gotham
-SearchBox.TextSize              = 12
-SearchBox.TextXAlignment        = Enum.TextXAlignment.Left
-SearchBox.ClearTextOnFocus      = false
-
-local PagesFolder = Instance.new("Folder", ContentArea)
-PagesFolder.Name = "Pages"
+local PagesFolder = new("Folder", ContentArea, { Name = "Pages" })
 
 local tabs      = {}
 local activeTab = nil
@@ -1161,51 +1140,41 @@ SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 local function switchTab(tabName)
-    activeTab    = tabName
+    activeTab = tabName
     SearchBox.Text = ""
     for name, tabData in pairs(tabs) do
         local active = (name == tabName)
         tabData.Page.Visible = active
         TweenService:Create(tabData.Button, TweenInfo.new(0.2), {
-            BackgroundColor3 = active and Color3.fromRGB(139, 124, 246) or Color3.fromRGB(23, 25, 32),
-            TextColor3       = active and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 155, 165),
+            BackgroundColor3 = active and C.accent or C.tabBg,
+            TextColor3       = active and C.white  or C.textDim,
         }):Play()
     end
     filterItems("")
 end
 
+-- ── Фабрики UI-компонентів ───────────────────────────────
 local function createTab(tabName, iconText)
-    local btn = Instance.new("TextButton", Sidebar)
-    btn.Name             = tabName .. "_Tab"
-    btn.Size             = UDim2.new(1, 0, 0, 34)
-    btn.BackgroundColor3 = Color3.fromRGB(23, 25, 32)
-    btn.Text             = (iconText or "•") .. "  " .. tabName
-    btn.Font             = Enum.Font.GothamMedium
-    btn.TextSize         = 12
-    btn.TextColor3       = Color3.fromRGB(150, 155, 165)
-    btn.TextXAlignment   = Enum.TextXAlignment.Left
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    Instance.new("UIPadding", btn).PaddingLeft = UDim.new(0, 10)
+    local btn = new("TextButton", Sidebar, {
+        Name = tabName .. "_Tab", Size = UDim2.new(1, 0, 0, 34),
+        BackgroundColor3 = C.tabBg,
+        Text = (iconText or "•") .. "  " .. tabName,
+        Font = Enum.Font.GothamMedium, TextSize = 12,
+        TextColor3 = C.textDim, TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    corner(btn, 6)
+    new("UIPadding", btn, { PaddingLeft = UDim.new(0, 10) })
 
-    local page = Instance.new("ScrollingFrame", PagesFolder)
-    page.Name                = tabName .. "_Page"
-    page.Size                = UDim2.new(1, -24, 1, -56)
-    page.Position            = UDim2.new(0, 12, 0, 48)
-    page.BackgroundTransparency = 1
-    page.BorderSizePixel     = 0
-    page.ScrollBarThickness  = 3
-    page.ScrollBarImageColor3 = Color3.fromRGB(139, 124, 246)
-    page.CanvasSize          = UDim2.new(0, 0, 0, 0)
-    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    page.Visible             = false
-
-    local list = Instance.new("UIListLayout", page)
-    list.Padding   = UDim.new(0, 8)
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-
-    local pad = Instance.new("UIPadding", page)
-    pad.PaddingRight  = UDim.new(0, 4)
-    pad.PaddingBottom = UDim.new(0, 10)
+    local page = new("ScrollingFrame", PagesFolder, {
+        Name = tabName .. "_Page", Size = UDim2.new(1, -24, 1, -56),
+        Position = UDim2.new(0, 12, 0, 48), BackgroundTransparency = 1,
+        BorderSizePixel = 0, ScrollBarThickness = 3,
+        ScrollBarImageColor3 = C.accent,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false,
+    })
+    new("UIListLayout", page, { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder })
+    new("UIPadding", page, { PaddingRight = UDim.new(0, 4), PaddingBottom = UDim.new(0, 10) })
 
     tabs[tabName] = { Button = btn, Page = page }
     btn.MouseButton1Click:Connect(function() switchTab(tabName) end)
@@ -1213,80 +1182,60 @@ local function createTab(tabName, iconText)
 end
 
 local function createSection(page, tabName, text)
-    local sec = Instance.new("Frame", page)
-    sec.Size                  = UDim2.new(1, 0, 0, 24)
-    sec.BackgroundTransparency = 1
-
-    local lbl = Instance.new("TextLabel", sec)
-    lbl.Size                  = UDim2.new(1, 0, 1, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text                  = text:upper()
-    lbl.Font                  = Enum.Font.GothamBold
-    lbl.TextSize              = 10
-    lbl.TextColor3            = Color3.fromRGB(139, 124, 246)
-    lbl.TextXAlignment        = Enum.TextXAlignment.Left
-
+    local sec = new("Frame", page, { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1 })
+    new("TextLabel", sec, {
+        Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+        Text = text:upper(), Font = Enum.Font.GothamBold, TextSize = 10,
+        TextColor3 = C.accent, TextXAlignment = Enum.TextXAlignment.Left,
+    })
     table.insert(uiElementsRegistry, { Name = text, Page = tabName, Frame = sec })
     return sec
 end
 
 local function createToggle(page, tabName, text, defaultVal, callback)
     local toggleState = (defaultVal == true)
+    local card = new("Frame", page, {
+        Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = C.card, BorderSizePixel = 0,
+    })
+    corner(card, 6)
+    new("TextLabel", card, {
+        Size = UDim2.new(1, -56, 1, 0), Position = UDim2.new(0, 12, 0, 0),
+        BackgroundTransparency = 1, Text = text,
+        Font = Enum.Font.GothamMedium, TextSize = 12,
+        TextColor3 = C.textSub, TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    local switch = new("TextButton", card, {
+        Size = UDim2.new(0, 36, 0, 20), Position = UDim2.new(1, -44, 0.5, -10),
+        BackgroundColor3 = toggleState and C.accent or C.switchOff, Text = "",
+    })
+    corner(switch, 999)
+    local knob = new("Frame", switch, {
+        Size = UDim2.new(0, 14, 0, 14),
+        Position = toggleState and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7),
+        BackgroundColor3 = C.white, BorderSizePixel = 0,
+    })
+    corner(knob, 999)
 
-    local card = Instance.new("Frame", page)
-    card.Size             = UDim2.new(1, 0, 0, 36)
-    card.BackgroundColor3 = Color3.fromRGB(28, 31, 39)
-    card.BorderSizePixel  = 0
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
-
-    local titleLbl = Instance.new("TextLabel", card)
-    titleLbl.Size                  = UDim2.new(1, -56, 1, 0)
-    titleLbl.Position              = UDim2.new(0, 12, 0, 0)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Text                  = text
-    titleLbl.Font                  = Enum.Font.GothamMedium
-    titleLbl.TextSize              = 12
-    titleLbl.TextColor3            = Color3.fromRGB(230, 233, 240)
-    titleLbl.TextXAlignment        = Enum.TextXAlignment.Left
-
-    local switch = Instance.new("TextButton", card)
-    switch.Size             = UDim2.new(0, 36, 0, 20)
-    switch.Position         = UDim2.new(1, -44, 0.5, -10)
-    switch.BackgroundColor3 = toggleState and Color3.fromRGB(139, 124, 246) or Color3.fromRGB(42, 46, 58)
-    switch.Text             = ""
-    Instance.new("UICorner", switch).CornerRadius = UDim.new(1, 0)
-
-    local knob = Instance.new("Frame", switch)
-    knob.Size             = UDim2.new(0, 14, 0, 14)
-    knob.Position         = toggleState and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
-    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    knob.BorderSizePixel  = 0
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-    local function setState(val, triggerCallback)
+    local function setState(val, triggerCb)
         toggleState = (val == true)
         TweenService:Create(switch, TweenInfo.new(0.2), {
-            BackgroundColor3 = toggleState and Color3.fromRGB(139, 124, 246) or Color3.fromRGB(42, 46, 58),
+            BackgroundColor3 = toggleState and C.accent or C.switchOff,
         }):Play()
         TweenService:Create(knob, TweenInfo.new(0.2), {
             Position = toggleState and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7),
         }):Play()
-        if triggerCallback and callback then callback(toggleState) end
+        if triggerCb and callback then callback(toggleState) end
     end
 
-    switch.MouseButton1Click:Connect(function()
-        setState(not toggleState, true)
-    end)
+    switch.MouseButton1Click:Connect(function() setState(not toggleState, true) end)
 
     local controlObj = {
-        Name  = text,
-        Page  = tabName,
-        Frame = card,
-        Set   = function(self, val, triggerCallback)
-            if triggerCallback == nil then triggerCallback = true end
-            setState(val, triggerCallback)
+        Name = text, Page = tabName, Frame = card,
+        Set  = function(self, val, triggerCb)
+            if triggerCb == nil then triggerCb = true end
+            setState(val, triggerCb)
         end,
-        Get   = function() return toggleState end,
+        Get  = function() return toggleState end,
     }
     table.insert(uiElementsRegistry, controlObj)
     return controlObj
@@ -1294,48 +1243,34 @@ end
 
 local function createSlider(page, tabName, text, min, max, step, defaultVal, callback)
     local currentVal = defaultVal or min
-
-    local card = Instance.new("Frame", page)
-    card.Size             = UDim2.new(1, 0, 0, 48)
-    card.BackgroundColor3 = Color3.fromRGB(28, 31, 39)
-    card.BorderSizePixel  = 0
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
-
-    local titleLbl = Instance.new("TextLabel", card)
-    titleLbl.Size                  = UDim2.new(1, -60, 0, 20)
-    titleLbl.Position              = UDim2.new(0, 12, 0, 4)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Text                  = text
-    titleLbl.Font                  = Enum.Font.GothamMedium
-    titleLbl.TextSize              = 12
-    titleLbl.TextColor3            = Color3.fromRGB(230, 233, 240)
-    titleLbl.TextXAlignment        = Enum.TextXAlignment.Left
-
-    local valLabel = Instance.new("TextLabel", card)
-    valLabel.Size                  = UDim2.new(0, 46, 0, 20)
-    valLabel.Position              = UDim2.new(1, -54, 0, 4)
-    valLabel.BackgroundTransparency = 1
-    valLabel.Text                  = tostring(currentVal)
-    valLabel.Font                  = Enum.Font.GothamBold
-    valLabel.TextSize              = 11
-    valLabel.TextColor3            = Color3.fromRGB(139, 124, 246)
-    valLabel.TextXAlignment        = Enum.TextXAlignment.Right
-
-    local bar = Instance.new("TextButton", card)
-    bar.Size             = UDim2.new(1, -24, 0, 6)
-    bar.Position         = UDim2.new(0, 12, 0, 32)
-    bar.BackgroundColor3 = Color3.fromRGB(42, 46, 58)
-    bar.Text             = ""
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
-
-    local fill = Instance.new("Frame", bar)
-    fill.Size             = UDim2.new(math.clamp((currentVal - min) / (max - min), 0, 1), 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(139, 124, 246)
-    fill.BorderSizePixel  = 0
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local card = new("Frame", page, {
+        Size = UDim2.new(1, 0, 0, 48), BackgroundColor3 = C.card, BorderSizePixel = 0,
+    })
+    corner(card, 6)
+    new("TextLabel", card, {
+        Size = UDim2.new(1, -60, 0, 20), Position = UDim2.new(0, 12, 0, 4),
+        BackgroundTransparency = 1, Text = text,
+        Font = Enum.Font.GothamMedium, TextSize = 12,
+        TextColor3 = C.textSub, TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    local valLabel = new("TextLabel", card, {
+        Size = UDim2.new(0, 46, 0, 20), Position = UDim2.new(1, -54, 0, 4),
+        BackgroundTransparency = 1, Text = tostring(currentVal),
+        Font = Enum.Font.GothamBold, TextSize = 11,
+        TextColor3 = C.accent, TextXAlignment = Enum.TextXAlignment.Right,
+    })
+    local bar = new("TextButton", card, {
+        Size = UDim2.new(1, -24, 0, 6), Position = UDim2.new(0, 12, 0, 32),
+        BackgroundColor3 = C.switchOff, Text = "",
+    })
+    corner(bar, 999)
+    local fill = new("Frame", bar, {
+        Size = UDim2.new(math.clamp((currentVal - min) / (max - min), 0, 1), 0, 1, 0),
+        BackgroundColor3 = C.accent, BorderSizePixel = 0,
+    })
+    corner(fill, 999)
 
     local draggingSlider = false
-
     local function updateFromPos(x)
         local rel     = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
         local raw     = min + (max - min) * rel
@@ -1349,8 +1284,7 @@ local function createSlider(page, tabName, text, min, max, step, defaultVal, cal
 
     bar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            draggingSlider = true
-            updateFromPos(input.Position.X)
+            draggingSlider = true; updateFromPos(input.Position.X)
         end
     end)
     UserInputService.InputEnded:Connect(function(input)
@@ -1365,82 +1299,66 @@ local function createSlider(page, tabName, text, min, max, step, defaultVal, cal
     end)
 
     local controlObj = {
-        Name  = text,
-        Page  = tabName,
-        Frame = card,
-        Set   = function(self, val, triggerCallback)
-            val = tonumber(val)
-            if not val then return end
-            if triggerCallback == nil then triggerCallback = true end
+        Name = text, Page = tabName, Frame = card,
+        Set  = function(self, val, triggerCb)
+            val = tonumber(val); if not val then return end
+            if triggerCb == nil then triggerCb = true end
             currentVal    = math.clamp(val, min, max)
             valLabel.Text = tostring(currentVal)
             fill.Size     = UDim2.new((currentVal - min) / (max - min), 0, 1, 0)
-            if triggerCallback and callback then callback(currentVal) end
+            if triggerCb and callback then callback(currentVal) end
         end,
-        Get   = function() return currentVal end,
+        Get  = function() return currentVal end,
     }
     table.insert(uiElementsRegistry, controlObj)
     return controlObj
 end
 
 local function createButton(page, tabName, text, callback)
-    local card = Instance.new("Frame", page)
-    card.Size             = UDim2.new(1, 0, 0, 36)
-    card.BackgroundColor3 = Color3.fromRGB(28, 31, 39)
-    card.BorderSizePixel  = 0
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
-
-    local btn = Instance.new("TextButton", card)
-    btn.Size                  = UDim2.new(1, 0, 1, 0)
-    btn.BackgroundTransparency = 1
-    btn.Text                  = text
-    btn.Font                  = Enum.Font.GothamMedium
-    btn.TextSize              = 12
-    btn.TextColor3            = Color3.fromRGB(240, 242, 245)
-
+    local card = new("Frame", page, {
+        Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = C.card, BorderSizePixel = 0,
+    })
+    corner(card, 6)
+    local btn = new("TextButton", card, {
+        Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+        Text = text, Font = Enum.Font.GothamMedium, TextSize = 12, TextColor3 = C.text,
+    })
     btn.MouseEnter:Connect(function()
-        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(36, 40, 52) }):Play()
+        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = C.cardHov }):Play()
     end)
     btn.MouseLeave:Connect(function()
-        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(28, 31, 39) }):Play()
+        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = C.card }):Play()
     end)
     btn.MouseButton1Click:Connect(function()
-        TweenService:Create(card, TweenInfo.new(0.08), { BackgroundColor3 = Color3.fromRGB(139, 124, 246) }):Play()
+        TweenService:Create(card, TweenInfo.new(0.08), { BackgroundColor3 = C.accent }):Play()
         task.wait(0.08)
-        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(28, 31, 39) }):Play()
+        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = C.card }):Play()
         if callback then callback() end
     end)
-
     table.insert(uiElementsRegistry, { Name = text, Page = tabName, Frame = card })
     return btn
 end
 
 local function createStatusLabel(page, tabName, initialText)
-    local card = Instance.new("Frame", page)
-    card.Size             = UDim2.new(1, 0, 0, 34)
-    card.BackgroundColor3 = Color3.fromRGB(24, 27, 34)
-    card.BorderSizePixel  = 0
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
-    local stroke = Instance.new("UIStroke", card)
-    stroke.Color     = Color3.fromRGB(42, 46, 58)
-    stroke.Thickness = 1
-
-    local lbl = Instance.new("TextLabel", card)
-    lbl.Size                  = UDim2.new(1, -20, 1, 0)
-    lbl.Position              = UDim2.new(0, 10, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text                  = initialText
-    lbl.Font                  = Enum.Font.GothamMedium
-    lbl.TextSize              = 12
-    lbl.TextColor3            = Color3.fromRGB(139, 124, 246)
-    lbl.TextXAlignment        = Enum.TextXAlignment.Left
-
+    local card = new("Frame", page, {
+        Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = C.statusBg, BorderSizePixel = 0,
+    })
+    corner(card, 6)
+    stroke(card, C.statusSt)
+    local lbl = new("TextLabel", card, {
+        Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0),
+        BackgroundTransparency = 1, Text = initialText,
+        Font = Enum.Font.GothamMedium, TextSize = 12,
+        TextColor3 = C.accent, TextXAlignment = Enum.TextXAlignment.Left,
+    })
     table.insert(uiElementsRegistry, { Name = "Статус", Page = tabName, Frame = card })
     return { Set = function(self, txt) lbl.Text = txt end }
 end
 
+print("[UA Killer Hub | GUI] Усі компоненти MonHub створено.")
+
 -- =======================================================
--- СТОРІНКИ ТА ЕЛЕМЕНТИ UI
+-- СТОРІНКИ ТА ЕЛЕМЕНТИ UI (через таблиці конфігурації)
 -- =======================================================
 local mainPage = createTab("Головна",  "🏠")
 local farmPage = createTab("Автофарм", "⚡")
@@ -1448,17 +1366,13 @@ local shopPage = createTab("Магазин",  "🛒")
 local miscPage = createTab("Інше",     "⚙")
 
 -- Посилання на контроли для системи конфігурації
-local autoLoadToggle, jumpPowerSlider, flySpeedSlider, pickupDistanceSlider
-local itemEspToggle, itemFarmToggle, autoSellToggle, autoCandyToggle
-local autoBuyToggle, antiAfkToggle, noclipToggle, autoRespawnToggle
 local itemToggleControls = {}
-
 local saveCurrentConfig, loadCurrentConfig   -- forward declaration
 
 -- ── Головна ──────────────────────────────────────────────
 createSection(mainPage, "Головна", "Конфігурація")
 
-autoLoadToggle = createToggle(mainPage, "Головна", "Автозавантаження при старті", shouldAutoLoad, function(value)
+local autoLoadToggle = createToggle(mainPage, "Головна", "Автозавантаження при старті", shouldAutoLoad, function(value)
     shouldAutoLoad = value
     pcall(function()
         if writefile then writefile(autoLoadFile, tostring(value)) end
@@ -1476,7 +1390,7 @@ end)
 
 createSection(mainPage, "Головна", "Характеристики")
 
-jumpPowerSlider = createSlider(mainPage, "Головна", "Висота стрибка (JumpPower)", 50, 200, 1, JP_Value, function(val)
+local jumpPowerSlider = createSlider(mainPage, "Головна", "Висота стрибка (JumpPower)", 50, 200, 1, JP_Value, function(val)
     JP_Value = val
     applyJumpPower()
 end)
@@ -1491,20 +1405,20 @@ task.spawn(function()
     end
 end)
 
-flySpeedSlider = createSlider(farmPage, "Автофарм", "Швидкість польоту", 50, 350, 5, _G.FlySpeed, function(val)
+local flySpeedSlider = createSlider(farmPage, "Автофарм", "Швидкість польоту", 50, 350, 5, _G.FlySpeed, function(val)
     _G.FlySpeed = val
 end)
 
-pickupDistanceSlider = createSlider(farmPage, "Автофарм", "Дистанція підбору", 2, 8, 0.5, _G.PickupDistance, function(val)
+local pickupDistanceSlider = createSlider(farmPage, "Автофарм", "Дистанція підбору", 2, 8, 0.5, _G.PickupDistance, function(val)
     _G.PickupDistance = val
 end)
 
-itemEspToggle = createToggle(farmPage, "Автофарм", "Увімкнути ESP", _G.ItemESP, function(val)
+local itemEspToggle = createToggle(farmPage, "Автофарм", "Увімкнути ESP", _G.ItemESP, function(val)
     manuallyChanged.ItemESP = true
     _G.ItemESP = val
 end)
 
-itemFarmToggle = createToggle(farmPage, "Автофарм", "Увімкнути автофарм", _G.ItemFarm, function(value)
+local itemFarmToggle = createToggle(farmPage, "Автофарм", "Увімкнути автофарм", _G.ItemFarm, function(value)
     manuallyChanged.ItemFarm = true
     _G.ItemFarm = value
     if not value then
@@ -1539,29 +1453,28 @@ for name in pairs(_G.SelectedItems) do table.insert(sortedItems, name) end
 table.sort(sortedItems)
 
 for _, itemName in ipairs(sortedItems) do
-    local ctrl = createToggle(farmPage, "Автофарм", itemName, _G.SelectedItems[itemName], function(val)
+    itemToggleControls[itemName] = createToggle(farmPage, "Автофарм", itemName, _G.SelectedItems[itemName], function(val)
         _G.SelectedItems[itemName] = val
         lastCacheRefresh = 0
     end)
-    itemToggleControls[itemName] = ctrl
 end
 
 -- ── Магазин ──────────────────────────────────────────────
 createSection(shopPage, "Магазин", "Торгівля та івенти")
 
-autoSellToggle = createToggle(shopPage, "Магазин", "Автопродаж (крім Lucky Arrow)", _G.AutoSell, function(value)
+local autoSellToggle = createToggle(shopPage, "Магазин", "Автопродаж (крім Lucky Arrow)", _G.AutoSell, function(value)
     manuallyChanged.AutoSell = true
     _G.AutoSell = value
     if value then syncSellQueue()
     else table.clear(sellQueue) closeMerchantDialogue() end
 end)
 
-autoCandyToggle = createToggle(shopPage, "Магазин", "Авто-здача конфет (Halloween Event)", _G.AutoEventCandy, function(value)
+local autoCandyToggle = createToggle(shopPage, "Магазин", "Авто-здача конфет (Halloween Event)", _G.AutoEventCandy, function(value)
     manuallyChanged.AutoEventCandy = true
     _G.AutoEventCandy = value
 end)
 
-autoBuyToggle = createToggle(shopPage, "Магазин", "Автокупівля (Lucky Arrow)", _G.AutoBuy, function(value)
+local autoBuyToggle = createToggle(shopPage, "Магазин", "Автокупівля (Lucky Arrow)", _G.AutoBuy, function(value)
     manuallyChanged.AutoBuy = true
     _G.AutoBuy = value
     if value then
@@ -1579,7 +1492,7 @@ end)
 -- ── Інше ─────────────────────────────────────────────────
 createSection(miscPage, "Інше", "Додаткові функції")
 
-antiAfkToggle = createToggle(miscPage, "Інше", "Anti-AFK", _G.AntiAFK, function(value)
+local antiAfkToggle = createToggle(miscPage, "Інше", "Anti-AFK", _G.AntiAFK, function(value)
     manuallyChanged.AntiAFK = true
     _G.AntiAFK = value
     if antiAfkConnection then antiAfkConnection:Disconnect() antiAfkConnection = nil end
@@ -1591,7 +1504,7 @@ antiAfkToggle = createToggle(miscPage, "Інше", "Anti-AFK", _G.AntiAFK, funct
     end
 end)
 
-noclipToggle = createToggle(miscPage, "Інше", "NoClip (окремо від фарму)", _G.StandaloneNoClip, function(value)
+local noclipToggle = createToggle(miscPage, "Інше", "NoClip (окремо від фарму)", _G.StandaloneNoClip, function(value)
     manuallyChanged.StandaloneNoClip = true
     _G.StandaloneNoClip = value
     if value then ensureNoClip()
@@ -1601,7 +1514,7 @@ noclipToggle = createToggle(miscPage, "Інше", "NoClip (окремо від �
     end
 end)
 
-autoRespawnToggle = createToggle(miscPage, "Інше", "Авто-респawn при смерті", _G.AutoRespawn, function(value)
+local autoRespawnToggle = createToggle(miscPage, "Інше", "Авто-респawn при смерті", _G.AutoRespawn, function(value)
     manuallyChanged.AutoRespawn = true
     _G.AutoRespawn = value
 end)
@@ -1768,97 +1681,56 @@ local function runSteppedAutoLoad()
     task.wait(AUTOLOAD_STEP)
 
     -- Таблиця поетапного відновлення перемикачів
-    -- Порядок: ItemFarm, AutoSell, AutoEventCandy, AutoBuy, ItemESP, AntiAFK, StandaloneNoClip, AutoRespawn
-    -- Для кожного кроку: { ключ у конфігу, посилання на контрол, назва для логу, функція активації }
-    local steps = {
-        {
-            key     = "ItemFarm",
-            control = itemFarmToggle,
-            label   = "Автофарм",
-            activate = function(val)
-                -- Лише оновлюємо візуал; персонаж НЕ переміщається автоматично
-                _G.ItemFarm = (val == true)
-                if itemFarmToggle then itemFarmToggle:Set(_G.ItemFarm, false) end
-                print("[UA Killer Hub | AutoLoad] ItemFarm відновлено: " .. tostring(_G.ItemFarm)
-                    .. " (ручне підтвердження для запуску переміщення)")
-            end,
-        },
-        {
-            key     = "AutoSell",
-            control = autoSellToggle,
-            label   = "Автопродаж",
-            activate = function(val)
-                _G.AutoSell = (val == true)
-                if autoSellToggle then autoSellToggle:Set(_G.AutoSell, false) end
-                if _G.AutoSell then syncSellQueue() end
-            end,
-        },
-        {
-            key     = "AutoEventCandy",
-            control = autoCandyToggle,
-            label   = "Авто-здача конфет",
-            activate = function(val)
-                _G.AutoEventCandy = (val == true)
-                if autoCandyToggle then autoCandyToggle:Set(_G.AutoEventCandy, false) end
-            end,
-        },
-        {
-            key     = "AutoBuy",
-            control = autoBuyToggle,
-            label   = "Автокупівля",
-            activate = function(val)
-                _G.AutoBuy = (val == true)
-                if autoBuyToggle then autoBuyToggle:Set(_G.AutoBuy, false) end
-                if _G.AutoBuy then
-                    task.spawn(function()
-                        while _G.AutoBuy do
-                            local char   = player.Character
-                            local remote = char and char:FindFirstChild("RemoteEvent")
-                            if remote then remote:FireServer("PurchaseShopItem", { ItemName = "1x Lucky Arrow" }) end
-                            task.wait(2.5 + math.random() * 1.5)
-                        end
-                    end)
-                end
-            end,
-        },
-        {
-            key     = "ItemESP",
-            control = itemEspToggle,
-            label   = "ESP",
-            activate = function(val)
-                _G.ItemESP = (val == true)
-                if itemEspToggle then itemEspToggle:Set(_G.ItemESP, false) end
-            end,
-        },
-        {
-            key     = "AntiAFK",
-            control = antiAfkToggle,
-            label   = "Anti-AFK",
-            activate = function(val)
-                if antiAfkToggle then antiAfkToggle:Set((val == true), true) end
-            end,
-        },
-        {
-            key     = "StandaloneNoClip",
-            control = noclipToggle,
-            label   = "NoClip",
-            activate = function(val)
-                if noclipToggle then noclipToggle:Set((val == true), true) end
-            end,
-        },
-        {
-            key     = "AutoRespawn",
-            control = autoRespawnToggle,
-            label   = "Авто-респавн",
-            activate = function(val)
-                if autoRespawnToggle then autoRespawnToggle:Set((val == true), true) end
-            end,
-        },
+    local toggleMap = {
+        { key = "ItemFarm",         ctrl = itemFarmToggle,    label = "Автофарм" },
+        { key = "AutoSell",         ctrl = autoSellToggle,    label = "Автопродаж" },
+        { key = "AutoEventCandy",   ctrl = autoCandyToggle,   label = "Авто-здача конфет" },
+        { key = "AutoBuy",          ctrl = autoBuyToggle,     label = "Автокупівля" },
+        { key = "ItemESP",          ctrl = itemEspToggle,     label = "ESP" },
+        { key = "AntiAFK",          ctrl = antiAfkToggle,     label = "Anti-AFK" },
+        { key = "StandaloneNoClip", ctrl = noclipToggle,      label = "NoClip" },
+        { key = "AutoRespawn",      ctrl = autoRespawnToggle, label = "Авто-респавн" },
     }
 
-    local totalSteps = #steps
-    for i, step in ipairs(steps) do
-        -- Захист від перезапису ручних змін
+    -- Спеціальні активатори для кроків, які потребують додаткової логіки
+    local specialActivators = {
+        ItemFarm = function(val)
+            _G.ItemFarm = (val == true)
+            if itemFarmToggle then itemFarmToggle:Set(_G.ItemFarm, false) end
+            print("[UA Killer Hub | AutoLoad] ItemFarm відновлено: " .. tostring(_G.ItemFarm)
+                .. " (ручне підтвердження для запуску переміщення)")
+        end,
+        AutoSell = function(val)
+            _G.AutoSell = (val == true)
+            if autoSellToggle then autoSellToggle:Set(_G.AutoSell, false) end
+            if _G.AutoSell then syncSellQueue() end
+        end,
+        AutoEventCandy = function(val)
+            _G.AutoEventCandy = (val == true)
+            if autoCandyToggle then autoCandyToggle:Set(_G.AutoEventCandy, false) end
+        end,
+        AutoBuy = function(val)
+            _G.AutoBuy = (val == true)
+            if autoBuyToggle then autoBuyToggle:Set(_G.AutoBuy, false) end
+            if _G.AutoBuy then
+                task.spawn(function()
+                    while _G.AutoBuy do
+                        local char   = player.Character
+                        local remote = char and char:FindFirstChild("RemoteEvent")
+                        if remote then remote:FireServer("PurchaseShopItem", { ItemName = "1x Lucky Arrow" }) end
+                        task.wait(2.5 + math.random() * 1.5)
+                    end
+                end)
+            end
+        end,
+        ItemESP = function(val)
+            _G.ItemESP = (val == true)
+            if itemEspToggle then itemEspToggle:Set(_G.ItemESP, false) end
+        end,
+    }
+
+    local totalSteps = #toggleMap
+    for i, step in ipairs(toggleMap) do
         if manuallyChanged[step.key] then
             print(string.format("[UA Killer Hub | AutoLoad] Крок %d/%d — '%s' пропущено (ручна зміна).", i, totalSteps, step.label))
             task.wait(AUTOLOAD_STEP)
@@ -1866,11 +1738,16 @@ local function runSteppedAutoLoad()
         end
 
         local savedVal = data[step.key]
-        -- Відновлюємо тільки true-значення; false залишає поточний стан
         if savedVal == true then
             print(string.format("[UA Killer Hub | AutoLoad] Крок %d/%d — '%s' увімкнено.", i, totalSteps, step.label))
             showNotification("Auto Load", string.format("(%d/%d) %s", i, totalSteps, step.label), AUTOLOAD_STEP + 0.5)
-            step.activate(true)
+
+            local activator = specialActivators[step.key]
+            if activator then
+                activator(true)
+            elseif step.ctrl then
+                step.ctrl:Set(true, true)
+            end
         else
             print(string.format("[UA Killer Hub | AutoLoad] Крок %d/%d — '%s' збережено як false, пропускаємо.", i, totalSteps, step.label))
         end
