@@ -1,4 +1,4 @@
--- UA Killer Hub | YBA — Версія з виправленим закриттям діалогу Halloween Event
+﻿-- UA Killer Hub | YBA — Версія з виправленим закриттям діалогу Halloween Event
 print("[UA Killer Hub | Init] Початок запуску скрипта...")
 
 if not game:IsLoaded() then
@@ -693,6 +693,11 @@ local function isGuiElementVisible(elem)
     if not elem.Visible then return false end
     if elem.AbsoluteSize.X <= 0 or elem.AbsoluteSize.Y <= 0 then return false end
 
+    -- Якщо текстовий елемент повністю прозорий — він ще не відображається для гравця
+    if (elem:IsA("TextLabel") or elem:IsA("TextButton")) and elem.TextTransparency >= 0.8 then
+        return false
+    end
+
     local current = elem.Parent
     while current and current:IsA("GuiObject") do
         if not current.Visible then return false end
@@ -936,7 +941,7 @@ local function findJackDialogue()
                         dialogueBox = desc.Parent
                     end
                 end
-                if lower:find("click to continue") or (lower:find("continue") and not lower:find("option")) then
+                if lower:find("click to continue") or lower:find("tap to continue") or (lower:find("continue") and not lower:find("option")) then
                     continueElem = desc
                 end
             end
@@ -998,7 +1003,7 @@ local function clickContinueButton(jackData)
         -- 1. Якщо елемент мітки чи її батьківський контейнер є кнопкою — викликаємо штатні сигнали
         local targetBtn = (jackData.continueElem and jackData.continueElem:IsA("GuiButton") and jackData.continueElem)
             or (jackData.continueElem and jackData.continueElem.Parent and jackData.continueElem.Parent:IsA("GuiButton") and jackData.continueElem.Parent)
-            or jackData.anyButton
+
 
         if targetBtn then
             print("[UA Killer Hub | Event] Виклик сигналу кнопки: " .. targetBtn.Name)
@@ -1012,11 +1017,11 @@ local function clickContinueButton(jackData)
 
         -- 2. Штатний клік мишкою по центру чорного діалогового вікна (де розташований текст і де клікає гравець)
         local targetBox = jackData.dialogueBox or (jackData.pointsElem and jackData.pointsElem.Parent) or jackData.pointsElem
-        if VirtualInputManager and targetBox and targetBox:IsA("GuiObject") then
+        if VirtualInputManager and targetBox and targetBox:IsA("GuiObject") and not jackData.continueElem then
             local absPos = targetBox.AbsolutePosition
             local absSize = targetBox.AbsoluteSize
             local clickX = absPos.X + absSize.X / 2
-            local clickY = absPos.Y + absSize.Y / 2
+            local clickY = absPos.Y + math.clamp(absSize.Y * 0.2, 10, 25)
 
             print(string.format("[UA Killer Hub | Event] Клік мишкою по центру рамки діалогу: (%d, %d)", math.floor(clickX), math.floor(clickY)))
             VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
@@ -1025,12 +1030,13 @@ local function clickContinueButton(jackData)
         end
 
         -- 3. Додатковий клік по центру тексту Continue (якщо він окремий від головної рамки)
-        if VirtualInputManager and jackData.continueElem and jackData.continueElem:IsA("GuiObject") and jackData.continueElem ~= targetBox then
+        if VirtualInputManager and jackData.continueElem and jackData.continueElem:IsA("GuiObject") then
             local absPos = jackData.continueElem.AbsolutePosition
             local absSize = jackData.continueElem.AbsoluteSize
             local clickX = absPos.X + absSize.X / 2
             local clickY = absPos.Y + absSize.Y / 2
 
+            print(string.format("[UA Killer Hub | Event] Клік мишкою по тексту Continue: (%d, %d)", math.floor(clickX), math.floor(clickY)))
             VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
             task.wait(0.06)
             VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
@@ -1060,13 +1066,13 @@ local function submitAllCandies()
             return
         end
 
-        print("[UA Killer Hub | Event] Очікування повідомлення про отримані очки...")
+        print("[UA Killer Hub | Event] Очікування повідомлення про отримані очки та кнопки Continue...")
         local pointsFound   = false
         local jackData      = nil
-        local pointsTimeout = tick() + 4.0
+        local pointsTimeout = tick() + 6.0
         while tick() < pointsTimeout and _G.AutoEventCandy do
             jackData = findJackDialogue()
-            if jackData and jackData.hasPoints then
+            if jackData and (jackData.hasPoints or jackData.continueElem) then
                 pointsFound = true
                 local msgText = jackData.pointsElem and jackData.pointsElem.Text or "Очки отримано"
                 print(string.format("[UA Killer Hub | Event] Отримано підтвердження: '%s'", msgText))
@@ -1079,36 +1085,39 @@ local function submitAllCandies()
             return
         end
 
-        task.wait(0.35)
-
-        -- Спроба закриття через визначені елементи
-        clickContinueButton(jackData)
-
-        -- Перевірка моменту закриття діалогу
-        local closeTimeout = tick() + 2.0
-        local isClosed     = false
-        while tick() < closeTimeout do
+        -- Очікуємо повної появи кнопки 'CLICK / TAP TO CONTINUE' (актуально при затримці в емуляторі)
+        local continueTimeout = tick() + 4.0
+        while tick() < continueTimeout and _G.AutoEventCandy do
+            local current = findJackDialogue()
+            if current and current.continueElem and isGuiElementVisible(current.continueElem) then
+                jackData = current
+                break
+            end
             task.wait(0.15)
-            if not findJackDialogue() then
+        end
+
+        -- Затримка для плавного завершення анімації друку тексту в повільному емуляторі
+        task.wait(0.8)
+
+        -- Багаторазове підтвердження закриття діалогу в циклі
+        -- (у YBA перший клік може завершити анімацію тексту, а другий остаточно закрити діалог)
+        local closeTimeout = tick() + 4.5
+        local isClosed     = false
+        while tick() < closeTimeout and _G.AutoEventCandy do
+            local currentData = findJackDialogue()
+            if not currentData then
                 isClosed = true
                 break
             end
+            clickContinueButton(currentData)
+            task.wait(0.5)
         end
 
         if isClosed then
             print("[UA Killer Hub | Event] Діалог Jack успішно закрито!")
             success = true
         else
-            print("[UA Killer Hub | Event] Діалог ще відкритий, виконуємо повторний клік...")
-            local retryData = findJackDialogue()
-            if retryData then
-                clickContinueButton(retryData)
-                task.wait(0.3)
-                if not findJackDialogue() then
-                    print("[UA Killer Hub | Event] Діалог Jack успішно закрито після повторного кліку!")
-                    success = true
-                end
-            end
+            warn("[UA Killer Hub | Event] Діалог Jack не вдалося закрити за відведений час.")
         end
     end)
     return success
