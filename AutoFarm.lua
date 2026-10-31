@@ -1,4 +1,4 @@
-﻿﻿-- UA Killer Hub | YBA — Версія з виправленим закриттям діалогу Halloween Event
+-- UA Killer Hub | YBA — Версія з виправленим закриттям діалогу Halloween Event
 print("[UA Killer Hub | Init] Початок запуску скрипта...")
 
 if not game:IsLoaded() then
@@ -1005,8 +1005,6 @@ local function clickContinueButton(jackData)
             if firesignal then
                 firesignal(targetBtn.MouseButton1Click)
                 firesignal(targetBtn.Activated)
-            else
-                targetBtn.Activated:Fire()
             end
         end
 
@@ -1079,8 +1077,10 @@ local function submitAllCandies()
             return
         end
 
-        -- Затримка перед натисканням (збільшено для повільного завантаження в емуляторі)
         task.wait(1.5)
+        if not _G.AutoEventCandy then return end
+        jackData = findJackDialogue()
+        if not jackData then return end
 
         -- Спроба закриття через визначені елементи
         clickContinueButton(jackData)
@@ -1111,9 +1111,6 @@ local function submitAllCandies()
                 end
             end
         end
-    end)
-    return success
-end
     end)
     return success
 end
